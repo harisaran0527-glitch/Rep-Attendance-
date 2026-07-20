@@ -1,0 +1,288 @@
+'use client';
+
+import { useState, useEffect } from 'react';
+import { getDashboardStatsAction } from '@/app/actions';
+import { SUBJECTS, PeriodNumber } from '@/lib/db-api';
+import {
+  Users,
+  CheckCircle,
+  XCircle,
+  Award,
+  Briefcase,
+  Activity,
+  CalendarDays,
+  Loader2,
+  Calendar,
+  Clock,
+} from 'lucide-react';
+
+interface Stats {
+  totalStudents: number;
+  present: number;
+  absent: number;
+  elite: number;
+  od: number;
+  ml: number;
+  ll: number;
+}
+
+export default function DashboardPage() {
+  const [date, setDate] = useState<string>(new Date().toISOString().split('T')[0]);
+  const [period, setPeriod] = useState<number>(1);
+  const [stats, setStats] = useState<Stats | null>(null);
+  const [loading, setLoading] = useState<boolean>(true);
+
+  const fetchStats = async () => {
+    setLoading(true);
+    try {
+      const data = await getDashboardStatsAction(date, period);
+      setStats(data);
+    } catch (error) {
+      console.error('Error fetching dashboard stats:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchStats();
+  }, [date, period]);
+
+  const cards = [
+    {
+      name: 'Total Students',
+      value: stats?.totalStudents ?? 0,
+      icon: Users,
+      color: 'from-slate-600/20 to-slate-800/20 border-slate-700/50 text-slate-400',
+      iconColor: 'text-slate-400 bg-slate-500/10',
+    },
+    {
+      name: 'Present',
+      value: stats?.present ?? 0,
+      icon: CheckCircle,
+      color: 'from-emerald-600/10 to-emerald-800/10 border-emerald-500/20 text-emerald-400',
+      iconColor: 'text-emerald-400 bg-emerald-500/10',
+    },
+    {
+      name: 'Absent',
+      value: stats?.absent ?? 0,
+      icon: XCircle,
+      color: 'from-rose-600/10 to-rose-800/10 border-rose-500/20 text-rose-400',
+      iconColor: 'text-rose-400 bg-rose-500/10',
+    },
+    {
+      name: 'ELITE',
+      value: stats?.elite ?? 0,
+      icon: Award,
+      color: 'from-amber-600/10 to-amber-800/10 border-amber-500/20 text-amber-400',
+      iconColor: 'text-amber-400 bg-amber-500/10',
+    },
+    {
+      name: 'On Duty (OD)',
+      value: stats?.od ?? 0,
+      icon: Briefcase,
+      color: 'from-blue-600/10 to-blue-800/10 border-blue-500/20 text-blue-400',
+      iconColor: 'text-blue-400 bg-blue-500/10',
+    },
+    {
+      name: 'Medical Leave (ML)',
+      value: stats?.ml ?? 0,
+      icon: Activity,
+      color: 'from-purple-600/10 to-purple-800/10 border-purple-500/20 text-purple-400',
+      iconColor: 'text-purple-400 bg-purple-500/10',
+    },
+    {
+      name: 'Long Leave (LL)',
+      value: stats?.ll ?? 0,
+      icon: CalendarDays,
+      color: 'from-zinc-600/10 to-zinc-800/10 border-zinc-500/20 text-zinc-400',
+      iconColor: 'text-zinc-400 bg-zinc-500/10',
+    },
+  ];
+
+  // Calculate marked students to display a summary progress bar
+  const totalMarked = stats
+    ? stats.present + stats.absent + stats.elite + stats.od + stats.ml + stats.ll
+    : 0;
+  const unmarked = stats ? Math.max(0, stats.totalStudents - totalMarked) : 0;
+
+  const getPercentage = (value: number) => {
+    if (!stats || stats.totalStudents === 0) return '0%';
+    return `${Math.round((value / stats.totalStudents) * 100)}%`;
+  };
+
+  return (
+    <div className="space-y-8 max-w-7xl mx-auto">
+      {/* Header section with Date and Period selector */}
+      <div className="glass p-6 rounded-2xl flex flex-col lg:flex-row gap-6 justify-between items-start lg:items-center">
+        <div>
+          <h3 className="text-lg font-semibold text-slate-100 flex items-center gap-2">
+            <Calendar className="w-5 h-5 text-indigo-400" />
+            <span>Today's Overview</span>
+          </h3>
+          <p className="text-xs text-slate-400 mt-1">
+            Monitor real-time student attendance statuses across subjects and periods.
+          </p>
+        </div>
+
+        <div className="flex flex-wrap gap-4 w-full lg:w-auto">
+          {/* Date Selector */}
+          <div className="flex-1 min-w-[160px] relative">
+            <label className="block text-[10px] uppercase font-bold tracking-wider text-slate-400 mb-1.5">
+              Selected Date
+            </label>
+            <div className="relative">
+              <input
+                type="date"
+                value={date}
+                onChange={(e) => setDate(e.target.value)}
+                className="w-full pl-3 pr-3 py-2 bg-slate-950/50 border border-slate-700/50 rounded-xl text-slate-200 text-sm focus:outline-none focus:ring-1 focus:ring-indigo-500"
+              />
+            </div>
+          </div>
+
+          {/* Period Selector */}
+          <div className="flex-1 min-w-[160px]">
+            <label className="block text-[10px] uppercase font-bold tracking-wider text-slate-400 mb-1.5">
+              Selected Period
+            </label>
+            <select
+              value={period}
+              onChange={(e) => setPeriod(Number(e.target.value))}
+              className="w-full px-3 py-2 bg-slate-950/50 border border-slate-700/50 rounded-xl text-slate-200 text-sm focus:outline-none focus:ring-1 focus:ring-indigo-500 cursor-pointer"
+            >
+              {[1, 2, 3, 4, 5].map((p) => (
+                <option key={p} value={p}>
+                  Period {p} ({SUBJECTS[p as PeriodNumber]})
+                </option>
+              ))}
+            </select>
+          </div>
+        </div>
+      </div>
+
+      {loading ? (
+        <div className="flex items-center justify-center py-20">
+          <Loader2 className="w-8 h-8 text-indigo-500 animate-spin" />
+        </div>
+      ) : (
+        <>
+          {/* Overview Visual Breakdown */}
+          <div className="glass p-6 rounded-2xl">
+            <div className="flex justify-between items-center mb-4">
+              <h4 className="text-sm font-semibold text-slate-200 flex items-center gap-2">
+                <Clock className="w-4 h-4 text-indigo-400" />
+                <span>Attendance Status Breakdown</span>
+              </h4>
+              <span className="text-xs text-slate-400 font-medium">
+                {totalMarked} / {stats?.totalStudents} Marked
+              </span>
+            </div>
+
+            {/* Distribution Bar */}
+            <div className="w-full h-3.5 bg-slate-800 rounded-full overflow-hidden flex shadow-inner">
+              {stats && stats.totalStudents > 0 ? (
+                <>
+                  <div
+                    style={{ width: getPercentage(stats.present) }}
+                    className="bg-emerald-500 h-full transition-all duration-500"
+                    title={`Present: ${stats.present}`}
+                  />
+                  <div
+                    style={{ width: getPercentage(stats.elite) }}
+                    className="bg-amber-500 h-full transition-all duration-500"
+                    title={`ELITE: ${stats.elite}`}
+                  />
+                  <div
+                    style={{ width: getPercentage(stats.od) }}
+                    className="bg-blue-500 h-full transition-all duration-500"
+                    title={`On Duty: ${stats.od}`}
+                  />
+                  <div
+                    style={{ width: getPercentage(stats.ml) }}
+                    className="bg-purple-500 h-full transition-all duration-500"
+                    title={`Medical Leave: ${stats.ml}`}
+                  />
+                  <div
+                    style={{ width: getPercentage(stats.ll) }}
+                    className="bg-zinc-500 h-full transition-all duration-500"
+                    title={`Long Leave: ${stats.ll}`}
+                  />
+                  <div
+                    style={{ width: getPercentage(stats.absent) }}
+                    className="bg-rose-500 h-full transition-all duration-500"
+                    title={`Absent: ${stats.absent}`}
+                  />
+                  <div
+                    style={{ width: getPercentage(unmarked) }}
+                    className="bg-slate-700 h-full transition-all duration-500"
+                    title={`Unmarked: ${unmarked}`}
+                  />
+                </>
+              ) : (
+                <div className="w-full h-full bg-slate-800" />
+              )}
+            </div>
+
+            {/* Legend */}
+            <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-4 mt-6">
+              {[
+                { name: 'Present', color: 'bg-emerald-500', val: stats?.present ?? 0 },
+                { name: 'ELITE', color: 'bg-amber-500', val: stats?.elite ?? 0 },
+                { name: 'On Duty', color: 'bg-blue-500', val: stats?.od ?? 0 },
+                { name: 'Medical Leave', color: 'bg-purple-500', val: stats?.ml ?? 0 },
+                { name: 'Long Leave', color: 'bg-zinc-500', val: stats?.ll ?? 0 },
+                { name: 'Absent', color: 'bg-rose-500', val: stats?.absent ?? 0 },
+                { name: 'Unmarked', color: 'bg-slate-750 border border-slate-700/50', val: unmarked },
+              ].map((item) => (
+                <div key={item.name} className="flex items-center gap-2">
+                  <span className={`w-3 h-3 rounded-full ${item.color} shrink-0`} />
+                  <span className="text-xs text-slate-400 font-medium truncate">{item.name}</span>
+                  <span className="text-xs font-bold text-slate-200 ml-auto">{item.val}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* Grid of Stat Cards */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+            {/* Custom layout for Total Students card to make it bigger/distinct */}
+            {cards.map((card, idx) => {
+              const Icon = card.icon;
+              return (
+                <div
+                  key={card.name}
+                  className={`glass-card p-6 bg-gradient-to-br ${card.color} border transition-all duration-300 hover:-translate-y-1 hover:shadow-xl`}
+                >
+                  <div className="flex justify-between items-start">
+                    <div>
+                      <p className="text-xs font-bold uppercase tracking-wider text-slate-400">
+                        {card.name}
+                      </p>
+                      <h3 className="text-3xl font-extrabold text-slate-100 mt-2">
+                        {card.value}
+                      </h3>
+                    </div>
+                    <div className={`p-3 rounded-xl ${card.iconColor}`}>
+                      <Icon className="w-6 h-6" />
+                    </div>
+                  </div>
+                  {card.name !== 'Total Students' && stats && stats.totalStudents > 0 && (
+                    <div className="mt-4 flex items-center gap-2">
+                      <span className="text-xs font-semibold text-slate-300">
+                        {getPercentage(card.value)}
+                      </span>
+                      <span className="text-[10px] text-slate-500 uppercase font-bold tracking-wider">
+                        of class
+                      </span>
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
