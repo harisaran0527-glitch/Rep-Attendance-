@@ -570,3 +570,30 @@ export async function getStudentWiseReportAction(studentId: number, startDateStr
     report,
   };
 }
+
+export async function getRecentActivityAction() {
+  if (!(await isAdminAuthenticated())) {
+    throw new Error('Unauthorized');
+  }
+
+  const activities = await prisma.attendance.findMany({
+    take: 5,
+    orderBy: {
+      updatedAt: 'desc',
+    },
+    include: {
+      student: true,
+    },
+  });
+
+  return activities.map((act) => ({
+    id: act.id,
+    studentName: act.student.studentName,
+    registerNumber: act.student.registerNumber,
+    status: act.status,
+    period: act.period,
+    date: act.date.toISOString().split('T')[0],
+    updatedAt: act.updatedAt,
+  }));
+}
+

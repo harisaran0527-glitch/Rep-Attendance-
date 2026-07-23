@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { getDashboardStatsAction } from '@/app/actions';
+import { getDashboardStatsAction, getRecentActivityAction } from '@/app/actions';
 import { SUBJECTS, PeriodNumber } from '@/lib/db-api';
 import {
   Users,
@@ -26,10 +26,21 @@ interface Stats {
   la: number;
 }
 
+interface ActivityLog {
+  id: number;
+  studentName: string;
+  registerNumber: string;
+  status: string;
+  period: number;
+  date: string;
+  updatedAt: string | Date;
+}
+
 export default function DashboardPage() {
   const [date, setDate] = useState<string>(new Date().toISOString().split('T')[0]);
   const [period, setPeriod] = useState<number>(1);
   const [stats, setStats] = useState<Stats | null>(null);
+  const [activities, setActivities] = useState<ActivityLog[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
 
   const fetchStats = async () => {
@@ -37,6 +48,8 @@ export default function DashboardPage() {
     try {
       const data = await getDashboardStatsAction(date, period);
       setStats(data);
+      const recent = await getRecentActivityAction();
+      setActivities(recent);
     } catch (error) {
       console.error('Error fetching dashboard stats:', error);
     } finally {
@@ -280,6 +293,53 @@ export default function DashboardPage() {
                 </div>
               );
             })}
+          </div>
+
+          {/* Recent Activity */}
+          <div className="glass p-6 rounded-2xl border border-slate-800">
+            <h4 className="text-sm font-semibold text-slate-200 flex items-center gap-2 mb-4">
+              <Activity className="w-4.5 h-4.5 text-indigo-400" />
+              <span>Recent Attendance Activity</span>
+            </h4>
+            {activities.length === 0 ? (
+              <p className="text-xs text-slate-500 py-4 text-center">No recent activity found. Mark attendance to get started.</p>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full text-left text-xs text-slate-300">
+                  <thead>
+                    <tr className="border-b border-slate-800 text-[10px] uppercase font-bold text-slate-400">
+                      <th className="py-2.5">Student</th>
+                      <th className="py-2.5 text-center">Date</th>
+                      <th className="py-2.5 text-center">Period</th>
+                      <th className="py-2.5 text-right">Status</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-850">
+                    {activities.map((act) => {
+                      let sColor = 'text-slate-400';
+                      if (act.status === 'Present') sColor = 'text-emerald-400 font-semibold';
+                      if (act.status === 'Absent') sColor = 'text-rose-400 font-semibold';
+                      if (act.status === 'Late') sColor = 'text-amber-400 font-semibold';
+                      if (act.status === 'On Duty (OD)') sColor = 'text-blue-400 font-semibold';
+                      if (act.status === 'Medical Leave (ML)') sColor = 'text-purple-400 font-semibold';
+                      if (act.status === 'Long Absent') sColor = 'text-zinc-500 font-semibold';
+
+                      return (
+                        <tr key={act.id} className="hover:bg-slate-800/10">
+                          <td className="py-3">
+                            <span className="font-semibold text-slate-100">{act.studentName}</span>
+                            <span className="block text-[10px] text-slate-400 font-mono">{act.registerNumber}</span>
+                          </td>
+                          <td className="py-3 text-center">{act.date}</td>
+                          <td className="py-3 text-center">Period {act.period}</td>
+                          <td className={`py-3 text-right ${sColor}`}>{act.status}</td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            )}
           </div>
         </>
       )}
