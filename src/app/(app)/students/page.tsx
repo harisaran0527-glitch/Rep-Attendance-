@@ -2,10 +2,11 @@
 
 import { useState, useEffect } from 'react';
 import {
-  getAllStudents,
+  getAllStudentsWithStats,
   addStudentAction,
   editStudentAction,
   deleteStudentAction,
+  addBulkStudentsAction,
 } from '@/app/actions';
 import {
   Plus,
@@ -17,15 +18,19 @@ import {
   AlertCircle,
   X,
   Users,
+  Upload,
 } from 'lucide-react';
+import * as XLSX from 'xlsx';
 
 interface Student {
   id: number;
   registerNumber: string;
   studentName: string;
+  email: string;
   department: string;
   year: string;
   section: string;
+  percentage?: number;
 }
 
 export default function StudentsPage() {
@@ -42,6 +47,7 @@ export default function StudentsPage() {
   // Form Fields
   const [registerNumber, setRegisterNumber] = useState('');
   const [studentName, setStudentName] = useState('');
+  const [email, setEmail] = useState('');
   const [department, setDepartment] = useState('');
   const [year, setYear] = useState('');
   const [section, setSection] = useState('');
@@ -52,7 +58,7 @@ export default function StudentsPage() {
   const fetchStudents = async () => {
     setLoading(true);
     try {
-      const data = await getAllStudents();
+      const data = await getAllStudentsWithStats();
       setStudents(data);
     } catch (error) {
       console.error('Error fetching students:', error);
@@ -69,6 +75,7 @@ export default function StudentsPage() {
     setEditingStudent(null);
     setRegisterNumber('');
     setStudentName('');
+    setEmail('');
     setDepartment('');
     setYear('');
     setSection('');
@@ -80,6 +87,7 @@ export default function StudentsPage() {
     setEditingStudent(student);
     setRegisterNumber(student.registerNumber);
     setStudentName(student.studentName);
+    setEmail(student.email || '');
     setDepartment(student.department);
     setYear(student.year);
     setSection(student.section);
@@ -95,6 +103,7 @@ export default function StudentsPage() {
     const data = {
       registerNumber,
       studentName,
+      email,
       department,
       year,
       section,
@@ -135,6 +144,46 @@ export default function StudentsPage() {
     }
   };
 
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setLoading(true);
+    try {
+      const data = await file.arrayBuffer();
+      const workbook = XLSX.read(data, { type: 'buffer' });
+      const worksheet = workbook.Sheets[workbook.SheetNames[0]];
+      const json = XLSX.utils.sheet_to_json(worksheet) as any[];
+
+      const studentsList = json.map(row => ({
+        registerNumber: String(row['Register Number'] || row['registerNumber'] || '').trim(),
+        studentName: String(row['Student Name'] || row['studentName'] || '').trim(),
+        email: String(row['Email'] || row['email'] || '').trim(),
+        department: String(row['Department'] || row['department'] || '').trim(),
+        year: String(row['Year'] || row['year'] || '').trim(),
+        section: String(row['Section'] || row['section'] || '').trim(),
+      })).filter(s => s.registerNumber && s.studentName);
+
+      if (studentsList.length > 0) {
+        const result = await addBulkStudentsAction(studentsList);
+        if (result.success) {
+          alert(`Successfully added ${result.addedCount} students.`);
+          fetchStudents();
+        } else {
+          alert(result.error || 'Bulk upload failed.');
+        }
+      } else {
+        alert('No valid student data found in the file. Make sure column headers are correct (Register Number, Student Name, Email, Department, Year, Section).');
+      }
+    } catch (err) {
+      console.error(err);
+      alert('Error processing file.');
+    } finally {
+      setLoading(false);
+      e.target.value = '';
+    }
+  };
+
   // Client side filtering for instant response
   const filteredStudents = students.filter((s) => {
     const q = searchQuery.toLowerCase();
@@ -166,13 +215,20 @@ export default function StudentsPage() {
         </div>
 
         {/* Add button */}
-        <button
-          onClick={openAddModal}
-          className="flex items-center justify-center gap-2 px-5 py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white font-medium rounded-xl shadow-lg shadow-indigo-600/10 transition-all text-sm cursor-pointer"
-        >
-          <Plus className="w-4.5 h-4.5" />
-          <span>Add Student</span>
-        </button>
+        <div className="flex gap-3">
+          <label className="flex items-center justify-center gap-2 px-4 py-2.5 bg-slate-800 hover:bg-slate-700 text-slate-200 font-medium rounded-xl shadow-lg transition-all text-sm cursor-pointer border border-slate-700">
+            <Upload className="w-4 h-4" />
+            <span className="hidden sm:inline">Import CSV</span>
+            <input type="file" accept=".csv, .xlsx, .xls" className="hidden" onChange={handleFileUpload} />
+          </label>
+          <button
+            onClick={openAddModal}
+            className="flex items-center justify-center gap-2 px-5 py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white font-medium rounded-xl shadow-lg shadow-indigo-600/10 transition-all text-sm cursor-pointer"
+          >
+            <Plus className="w-4.5 h-4.5" />
+            <span>Add Student</span>
+          </button>
+        </div>
       </div>
 
       {/* Main Students List Workspace */}
@@ -196,9 +252,10 @@ export default function StudentsPage() {
                 <tr className="bg-slate-950/40 border-b border-slate-800 text-xs font-bold uppercase tracking-wider text-slate-400">
                   <th className="px-6 py-4">Register Number</th>
                   <th className="px-6 py-4">Student Name</th>
+                  <th className="px-6 py-4">Email</th>
                   <th className="px-6 py-4">Department</th>
-                  <th className="px-6 py-4">Year</th>
-                  <th className="px-6 py-4">Section</th>
+                  <th className="px-6 py-4">Year/Sec</th>
+                  <th className="px-6 py-4">Attendance</th>
                   <th className="px-6 py-4 text-right">Actions</th>
                 </tr>
               </thead>
@@ -214,9 +271,22 @@ export default function StudentsPage() {
                     <td className="px-6 py-4 font-medium text-slate-100">
                       {student.studentName}
                     </td>
+                    <td className="px-6 py-4 text-slate-400 text-xs">{student.email || '-'}</td>
                     <td className="px-6 py-4 text-slate-400">{student.department}</td>
-                    <td className="px-6 py-4 text-slate-400">{student.year}</td>
-                    <td className="px-6 py-4 text-slate-400">{student.section}</td>
+                    <td className="px-6 py-4 text-slate-400">{student.year} - {student.section}</td>
+                    <td className="px-6 py-4">
+                      {student.percentage !== undefined ? (
+                        <span className={`px-2.5 py-1 rounded-full text-xs font-semibold ${
+                          student.percentage >= 75 ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20' :
+                          student.percentage >= 65 ? 'bg-yellow-500/10 text-yellow-400 border border-yellow-500/20' :
+                          'bg-red-500/10 text-red-400 border border-red-500/20'
+                        }`}>
+                          {student.percentage}%
+                        </span>
+                      ) : (
+                        <span className="text-slate-500">-</span>
+                      )}
+                    </td>
                     <td className="px-6 py-4 text-right">
                       <div className="flex items-center justify-end gap-3">
                         <button
@@ -295,6 +365,19 @@ export default function StudentsPage() {
                   value={studentName}
                   onChange={(e) => setStudentName(e.target.value)}
                   placeholder="e.g. John Doe"
+                  className="block w-full px-3.5 py-2.5 bg-slate-950/50 border border-slate-700/50 rounded-xl text-slate-200 focus:outline-none focus:ring-1 focus:ring-indigo-500 text-sm"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold uppercase tracking-wider text-slate-400 mb-1.5">
+                  Email
+                </label>
+                <input
+                  type="email"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  placeholder="john@example.com"
                   className="block w-full px-3.5 py-2.5 bg-slate-950/50 border border-slate-700/50 rounded-xl text-slate-200 focus:outline-none focus:ring-1 focus:ring-indigo-500 text-sm"
                 />
               </div>

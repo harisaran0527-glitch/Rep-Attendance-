@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import {
-  getAllStudents,
+  getAllStudentsWithStats,
   getAttendanceForDateAndPeriodAction,
   saveBulkAttendanceAction,
 } from '@/app/actions';
@@ -26,6 +26,7 @@ interface Student {
   department: string;
   year: string;
   section: string;
+  percentage?: number;
 }
 
 interface AttendanceMap {
@@ -47,7 +48,7 @@ export default function AttendancePage() {
     setLoading(true);
     setSavingState('idle');
     try {
-      const studentsData = await getAllStudents();
+      const studentsData = await getAllStudentsWithStats();
       setStudents(studentsData);
 
       const attResult = await getAttendanceForDateAndPeriodAction(date, period);
@@ -299,8 +300,17 @@ export default function AttendancePage() {
                       className="hover:bg-slate-800/10 transition-colors"
                     >
                       <td className="px-6 py-4">
-                        <div className="font-semibold text-slate-100">
+                        <div className="font-semibold text-slate-100 flex items-center gap-2">
                           {student.studentName}
+                          {student.percentage !== undefined && (
+                            <span className={`px-1.5 py-0.5 rounded-md text-[10px] font-bold ${
+                              student.percentage >= 75 ? 'bg-emerald-500/10 text-emerald-400' :
+                              student.percentage >= 65 ? 'bg-yellow-500/10 text-yellow-400' :
+                              'bg-red-500/10 text-red-400'
+                            }`}>
+                              {student.percentage}%
+                            </span>
+                          )}
                         </div>
                         <div className="text-xs text-slate-400 mt-0.5 font-mono">
                           {student.registerNumber} &bull; {student.department} {student.year} Sec {student.section}
@@ -332,23 +342,23 @@ export default function AttendancePage() {
                             A
                           </button>
 
-                          {/* ELITE */}
+                          {/* Late */}
                           <button
-                            onClick={() => handleStatusChange(student.id, 'ELITE')}
+                            onClick={() => handleStatusChange(student.id, 'Late')}
                             className={`px-3 py-1.5 border rounded-xl text-xs font-bold transition-all cursor-pointer ${getStatusStyle(
-                              'ELITE',
+                              'Late',
                               currentStatus,
                               'bg-amber-600 hover:bg-amber-500'
                             )}`}
                           >
-                            ELITE
+                            L
                           </button>
 
                           {/* On Duty */}
                           <button
-                            onClick={() => handleStatusChange(student.id, 'On Duty')}
+                            onClick={() => handleStatusChange(student.id, 'On Duty (OD)')}
                             className={`px-3 py-1.5 border rounded-xl text-xs font-bold transition-all cursor-pointer ${getStatusStyle(
-                              'On Duty',
+                              'On Duty (OD)',
                               currentStatus,
                               'bg-blue-600 hover:bg-blue-500'
                             )}`}
@@ -358,9 +368,9 @@ export default function AttendancePage() {
 
                           {/* Medical Leave */}
                           <button
-                            onClick={() => handleStatusChange(student.id, 'Medical Leave')}
+                            onClick={() => handleStatusChange(student.id, 'Medical Leave (ML)')}
                             className={`px-3 py-1.5 border rounded-xl text-xs font-bold transition-all cursor-pointer ${getStatusStyle(
-                              'Medical Leave',
+                              'Medical Leave (ML)',
                               currentStatus,
                               'bg-purple-600 hover:bg-purple-500'
                             )}`}
@@ -368,16 +378,16 @@ export default function AttendancePage() {
                             ML
                           </button>
 
-                          {/* Long Leave */}
+                          {/* Long Absent */}
                           <button
-                            onClick={() => handleStatusChange(student.id, 'Long Leave')}
+                            onClick={() => handleStatusChange(student.id, 'Long Absent')}
                             className={`px-3 py-1.5 border rounded-xl text-xs font-bold transition-all cursor-pointer ${getStatusStyle(
-                              'Long Leave',
+                              'Long Absent',
                               currentStatus,
                               'bg-zinc-600 hover:bg-zinc-500'
                             )}`}
                           >
-                            LL
+                            LA
                           </button>
                         </div>
                       </td>

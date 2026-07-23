@@ -11,7 +11,13 @@ import {
   normalizeDate,
   AttendanceStatus,
   getAllStudents as dbGetAllStudents,
+  getSmtpSettings,
+  updateSmtpSettings,
+  getEmailLogs,
+  logSentEmail,
+  calculateOverallAttendance,
 } from '@/lib/db-api';
+import { sendLowAttendanceEmail } from '@/lib/email';
 
 export async function getAllStudents() {
   if (!(await isAdminAuthenticated())) {
@@ -20,6 +26,25 @@ export async function getAllStudents() {
   return dbGetAllStudents();
 }
 
+// Action to get students with their percentages
+export async function getAllStudentsWithStats() {
+  if (!(await isAdminAuthenticated())) {
+    throw new Error('Unauthorized');
+  }
+  const students = await dbGetAllStudents();
+  const results = await Promise.all(
+    students.map(async (student) => {
+      const stats = await calculateOverallAttendance(student.id);
+      return {
+        ...student,
+        percentage: stats.percentage,
+        attended: stats.attended,
+        totalClasses: stats.total,
+      };
+    })
+  );
+  return results;
+}
 
 // ==========================================
 // AUTH ACTIONS
@@ -57,6 +82,7 @@ export async function logoutAction() {
 export async function addStudentAction(data: {
   registerNumber: string;
   studentName: string;
+  email: string;
   department: string;
   year: string;
   section: string;
@@ -72,9 +98,41 @@ export async function addStudentAction(data: {
     return { success: true };
   } catch (error: any) {
     if (error.code === 'P2002') {
-      return { success: false, error: 'Register Number already exists.' };
+      return { success: false, error: 'Register Number or Email already exists.' };
     }
     return { success: false, error: 'Failed to add student.' };
+  }
+}
+
+export async function addBulkStudentsAction(studentsList: {
+  registerNumber: string;
+  studentName: string;
+  email: string;
+  department: string;
+  year: string;
+  section: string;
+}[]) {
+  if (!(await isAdminAuthenticated())) {
+    throw new Error('Unauthorized');
+  }
+  try {
+    let addedCount = 0;
+    let failedList: string[] = [];
+
+    for (const studentData of studentsList) {
+      try {
+        await addStudent(studentData);
+        addedCount++;
+      } catch (error: any) {
+        console.error('Failed to seed bulk student:', studentData.registerNumber, error);
+        failedList.push(studentData.registerNumber);
+      }
+    }
+    revalidatePath('/students');
+    revalidatePath('/dashboard');
+    return { success: true, addedCount, failedList };
+  } catch (err) {
+    return { success: false, error: 'Bulk upload action failed.' };
   }
 }
 
@@ -83,6 +141,7 @@ export async function editStudentAction(
   data: {
     registerNumber: string;
     studentName: string;
+    email: string;
     department: string;
     year: string;
     section: string;
@@ -99,7 +158,7 @@ export async function editStudentAction(
     return { success: true };
   } catch (error: any) {
     if (error.code === 'P2002') {
-      return { success: false, error: 'Register Number already exists.' };
+      return { success: false, error: 'Register Number or Email already exists.' };
     }
     return { success: false, error: 'Failed to edit student.' };
   }
@@ -117,6 +176,64 @@ export async function deleteStudentAction(id: number) {
     return { success: true };
   } catch (error) {
     return { success: false, error: 'Failed to delete student.' };
+  }
+}
+
+// ==========================================
+// SMTP SETTINGS & EMAIL LOGS ACTIONS
+// ==========================================
+
+export async function getSmtpSettingsAction() {
+  if (!(await isAdminAuthenticated())) {
+    throw new Error('Unauthorized');
+  }
+  return getSmtpSettings();
+}
+
+export async function updateSmtpSettingsAction(data: {
+  host: string;
+  port: number;
+  secure: boolean;
+  user: string;
+  password?: string;
+  senderName: string;
+  senderEmail: string;
+  lowThreshold: number;
+}) {
+  if (!(await isAdminAuthenticated())) {
+    throw new Error('Unauthorized');
+  }
+  try {
+    const result = await updateSmtpSettings(data);
+    return { success: true, data: result };
+  } catch (err: any) {
+    return { success: false, error: err.message || 'Failed to update settings.' };
+  }
+}
+
+export async function getEmailLogsAction() {
+  if (!(await isAdminAuthenticated())) {
+    throw new Error('Unauthorized');
+  }
+  return getEmailLogs();
+}
+
+export async function sendTestEmailAction(testEmail: string) {
+  if (!(await isAdminAuthenticated())) {
+    throw new Error('Unauthorized');
+  }
+  try {
+    const settings = await getSmtpSettings();
+    const result = await sendLowAttendanceEmail(
+      'Test Student',
+      testEmail,
+      72.5,
+      settings.lowThreshold,
+      settings
+    );
+    return result;
+  } catch (err: any) {
+    return { success: false, status: 'Simulated', error: err.message };
   }
 }
 
@@ -155,6 +272,52 @@ export async function saveBulkAttendanceAction(
         })
       )
     );
+
+    // Auto warning email alerts trigger block
+    const affectedStudentIds = Array.from(new Set(records.map((r) => r.studentId)));
+    const settings = await getSmtpSettings();
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    for (const studentId of affectedStudentIds) {
+      const { percentage } = await calculateOverallAttendance(studentId);
+      if (percentage < settings.lowThreshold) {
+        // Avoid sending multiple alerts in the same day
+        const warnedToday = await prisma.emailLog.findFirst({
+          where: {
+            studentId,
+            sentAt: {
+              gte: today,
+            },
+          },
+        });
+
+        if (!warnedToday) {
+          const student = await prisma.student.findUnique({
+            where: { id: studentId },
+          });
+
+          if (student && student.email) {
+            const emailResult = await sendLowAttendanceEmail(
+              student.studentName,
+              student.email,
+              percentage,
+              settings.lowThreshold,
+              settings
+            );
+
+            await logSentEmail({
+              studentId,
+              email: student.email,
+              percentage,
+              subject: `Urgent: Low Attendance Warning (${percentage}%)`,
+              body: `Dear ${student.studentName}, your overall attendance of ${percentage}% has fallen below the required threshold of ${settings.lowThreshold}%.`,
+              status: emailResult.status,
+            });
+          }
+        }
+      }
+    }
 
     revalidatePath('/attendance');
     revalidatePath('/history');
@@ -220,10 +383,10 @@ export async function getDashboardStatsAction(dateString: string, period: number
   const counts = {
     Present: 0,
     Absent: 0,
-    ELITE: 0,
-    'On Duty': 0,
-    'Medical Leave': 0,
-    'Long Leave': 0,
+    Late: 0,
+    'On Duty (OD)': 0,
+    'Medical Leave (ML)': 0,
+    'Long Absent': 0,
   };
 
   attendances.forEach((att) => {
@@ -241,10 +404,10 @@ export async function getDashboardStatsAction(dateString: string, period: number
     totalStudents,
     present: counts['Present'],
     absent: counts['Absent'],
-    elite: counts['ELITE'],
-    od: counts['On Duty'],
-    ml: counts['Medical Leave'],
-    ll: counts['Long Leave'],
+    late: counts['Late'],
+    od: counts['On Duty (OD)'],
+    ml: counts['Medical Leave (ML)'],
+    la: counts['Long Absent'],
   };
 }
 
@@ -321,10 +484,10 @@ export async function getSubjectWiseReportAction(startDateStr: string, endDateSt
     const counts = {
       Present: 0,
       Absent: 0,
-      ELITE: 0,
-      'On Duty': 0,
-      'Medical Leave': 0,
-      'Long Leave': 0,
+      Late: 0,
+      'On Duty (OD)': 0,
+      'Medical Leave (ML)': 0,
+      'Long Absent': 0,
     };
 
     studentAtts.forEach((a) => {
@@ -333,10 +496,8 @@ export async function getSubjectWiseReportAction(startDateStr: string, endDateSt
       }
     });
 
-    // Attendance rate = (Present + ELITE + On Duty) / Total marked * 100
-    // Medical Leave, Long Leave, Absent count against standard presence unless defined otherwise.
-    // Let's count Present, ELITE, On Duty as "Attended" for percentage calculations.
-    const attended = counts['Present'] + counts['ELITE'] + counts['On Duty'];
+    // Attendance rate = (Present + Late + OD + ML) / Total marked * 100
+    const attended = counts['Present'] + counts['Late'] + counts['On Duty (OD)'] + counts['Medical Leave (ML)'];
     const percentage = totalPeriods > 0 ? Math.round((attended / totalPeriods) * 100) : 0;
 
     return {
@@ -348,10 +509,10 @@ export async function getSubjectWiseReportAction(startDateStr: string, endDateSt
       totalClasses: totalPeriods,
       present: counts['Present'],
       absent: counts['Absent'],
-      elite: counts['ELITE'],
-      od: counts['On Duty'],
-      ml: counts['Medical Leave'],
-      ll: counts['Long Leave'],
+      late: counts['Late'],
+      od: counts['On Duty (OD)'],
+      ml: counts['Medical Leave (ML)'],
+      la: counts['Long Absent'],
       percentage,
     };
   });

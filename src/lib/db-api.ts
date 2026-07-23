@@ -22,13 +22,106 @@ export type PeriodNumber = 1 | 2 | 3 | 4 | 5;
 export const ATTENDANCE_STATUSES = [
   'Present',
   'Absent',
-  'ELITE',
-  'On Duty',
-  'Medical Leave',
-  'Long Leave'
+  'Late',
+  'On Duty (OD)',
+  'Medical Leave (ML)',
+  'Long Absent'
 ] as const;
 
 export type AttendanceStatus = typeof ATTENDANCE_STATUSES[number];
+
+// ==========================================
+// SMTP SETTINGS & EMAIL LOGS API
+// ==========================================
+
+export async function getSmtpSettings() {
+  return prisma.smtpSettings.upsert({
+    where: { id: 1 },
+    update: {},
+    create: {
+      id: 1,
+      host: 'smtp.gmail.com',
+      port: 587,
+      secure: false,
+      user: '',
+      password: '',
+      senderName: 'College Attendance Portal',
+      senderEmail: '',
+      lowThreshold: 75.0,
+    },
+  });
+}
+
+export async function updateSmtpSettings(data: {
+  host: string;
+  port: number;
+  secure: boolean;
+  user: string;
+  password?: string;
+  senderName: string;
+  senderEmail: string;
+  lowThreshold: number;
+}) {
+  const updateData: any = {
+    host: data.host.trim(),
+    port: Number(data.port),
+    secure: Boolean(data.secure),
+    user: data.user.trim(),
+    senderName: data.senderName.trim(),
+    senderEmail: data.senderEmail.trim(),
+    lowThreshold: Number(data.lowThreshold),
+  };
+
+  if (data.password !== undefined) {
+    updateData.password = data.password;
+  }
+
+  return prisma.smtpSettings.update({
+    where: { id: 1 },
+    data: updateData,
+  });
+}
+
+export async function getEmailLogs() {
+  return prisma.emailLog.findMany({
+    include: {
+      student: true,
+    },
+    orderBy: {
+      sentAt: 'desc',
+    },
+  });
+}
+
+export async function logSentEmail(data: {
+  studentId: number;
+  email: string;
+  percentage: number;
+  subject: string;
+  body: string;
+  status: string;
+}) {
+  return prisma.emailLog.create({
+    data,
+  });
+}
+
+export async function calculateOverallAttendance(studentId: number) {
+  const attendances = await prisma.attendance.findMany({
+    where: { studentId },
+  });
+
+  if (attendances.length === 0) {
+    return { percentage: 100.0, attended: 0, total: 0 };
+  }
+
+  const attendedStatuses = ['Present', 'Late', 'On Duty (OD)', 'Medical Leave (ML)'];
+  const attended = attendances.filter((a) => attendedStatuses.includes(a.status)).length;
+  const total = attendances.length;
+  const percentage = Math.round((attended / total) * 1000) / 10; // 1 decimal place e.g. 74.5
+
+  return { percentage, attended, total };
+}
 
 // ==========================================
 // STUDENTS API
@@ -37,6 +130,7 @@ export type AttendanceStatus = typeof ATTENDANCE_STATUSES[number];
 export async function addStudent(data: {
   registerNumber: string;
   studentName: string;
+  email: string;
   department: string;
   year: string;
   section: string;
@@ -45,6 +139,7 @@ export async function addStudent(data: {
     data: {
       registerNumber: data.registerNumber.trim(),
       studentName: data.studentName.trim(),
+      email: data.email.trim(),
       department: data.department.trim(),
       year: data.year.trim(),
       section: data.section.trim(),
@@ -57,6 +152,7 @@ export async function editStudent(
   data: {
     registerNumber: string;
     studentName: string;
+    email: string;
     department: string;
     year: string;
     section: string;
@@ -67,6 +163,7 @@ export async function editStudent(
     data: {
       registerNumber: data.registerNumber.trim(),
       studentName: data.studentName.trim(),
+      email: data.email.trim(),
       department: data.department.trim(),
       year: data.year.trim(),
       section: data.section.trim(),

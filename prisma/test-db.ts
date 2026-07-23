@@ -23,6 +23,7 @@ async function test() {
   const student1 = await addStudent({
     registerNumber: 'REG001',
     studentName: 'Alice Johnson',
+    email: 'alice@example.com',
     department: 'CSE',
     year: 'III',
     section: 'A',
@@ -32,7 +33,8 @@ async function test() {
   const student2 = await addStudent({
     registerNumber: 'REG002',
     studentName: 'Bob Smith',
-    department: 'CSE',
+    email: 'bob@example.com',
+    department: 'IT',
     year: 'III',
     section: 'B',
   });
@@ -48,6 +50,7 @@ async function test() {
   const updatedStudent1 = await editStudent(student1.id, {
     registerNumber: 'REG001',
     studentName: 'Alice J. Miller',
+    email: 'alice.miller@example.com',
     department: 'CSE',
     year: 'III',
     section: 'A',
@@ -77,11 +80,11 @@ async function test() {
   const att2 = await saveAttendance(student2.id, testDate, 1, 'Absent');
   console.log(`Saved Attendance for ${student2.studentName}: Period 1 -> ${att2.status}`);
 
-  // 6. Test Upsert (Save attendance again for Alice, Period 1 with status ELITE)
-  console.log('Testing Upsert (changing Alice to ELITE)...');
-  const att1Updated = await saveAttendance(student1.id, testDate, 1, 'ELITE');
+  // 6. Test Upsert (Save attendance again for Alice, Period 1 with status Late)
+  console.log('Testing Upsert (changing Alice to Late)...');
+  const att1Updated = await saveAttendance(student1.id, testDate, 1, 'Late');
   console.log(`Updated Attendance for ${student1.studentName}: Period 1 -> ${att1Updated.status}`);
-  if (att1Updated.status !== 'ELITE') {
+  if (att1Updated.status !== 'Late') {
     throw new Error('Upsert status update failed');
   }
 
@@ -101,7 +104,7 @@ async function test() {
   console.log(`Getting history for Alice (ID: ${student1.id})...`);
   const history = await getStudentAttendanceHistory(student1.id);
   console.log('Alice history count:', history.length);
-  if (history.length !== 1 || history[0].status !== 'ELITE') {
+  if (history.length !== 1 || history[0].status !== 'Late') {
     throw new Error('History fetch or status failed');
   }
 

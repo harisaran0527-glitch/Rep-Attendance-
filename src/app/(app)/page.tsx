@@ -20,10 +20,10 @@ interface Stats {
   totalStudents: number;
   present: number;
   absent: number;
-  elite: number;
+  late: number;
   od: number;
   ml: number;
-  ll: number;
+  la: number;
 }
 
 export default function DashboardPage() {
@@ -71,9 +71,9 @@ export default function DashboardPage() {
       iconColor: 'text-rose-400 bg-rose-500/10',
     },
     {
-      name: 'ELITE',
-      value: stats?.elite ?? 0,
-      icon: Award,
+      name: 'Late',
+      value: stats?.late ?? 0,
+      icon: Clock,
       color: 'from-amber-600/10 to-amber-800/10 border-amber-500/20 text-amber-400',
       iconColor: 'text-amber-400 bg-amber-500/10',
     },
@@ -92,8 +92,8 @@ export default function DashboardPage() {
       iconColor: 'text-purple-400 bg-purple-500/10',
     },
     {
-      name: 'Long Leave (LL)',
-      value: stats?.ll ?? 0,
+      name: 'Long Absent (LA)',
+      value: stats?.la ?? 0,
       icon: CalendarDays,
       color: 'from-zinc-600/10 to-zinc-800/10 border-zinc-500/20 text-zinc-400',
       iconColor: 'text-zinc-400 bg-zinc-500/10',
@@ -102,7 +102,7 @@ export default function DashboardPage() {
 
   // Calculate marked students to display a summary progress bar
   const totalMarked = stats
-    ? stats.present + stats.absent + stats.elite + stats.od + stats.ml + stats.ll
+    ? stats.present + stats.absent + stats.late + stats.od + stats.ml + stats.la
     : 0;
   const unmarked = stats ? Math.max(0, stats.totalStudents - totalMarked) : 0;
 
@@ -189,9 +189,9 @@ export default function DashboardPage() {
                     title={`Present: ${stats.present}`}
                   />
                   <div
-                    style={{ width: getPercentage(stats.elite) }}
+                    style={{ width: getPercentage(stats.late) }}
                     className="bg-amber-500 h-full transition-all duration-500"
-                    title={`ELITE: ${stats.elite}`}
+                    title={`Late: ${stats.late}`}
                   />
                   <div
                     style={{ width: getPercentage(stats.od) }}
@@ -204,9 +204,9 @@ export default function DashboardPage() {
                     title={`Medical Leave: ${stats.ml}`}
                   />
                   <div
-                    style={{ width: getPercentage(stats.ll) }}
+                    style={{ width: getPercentage(stats.la) }}
                     className="bg-zinc-500 h-full transition-all duration-500"
-                    title={`Long Leave: ${stats.ll}`}
+                    title={`Long Absent: ${stats.la}`}
                   />
                   <div
                     style={{ width: getPercentage(stats.absent) }}
@@ -228,10 +228,10 @@ export default function DashboardPage() {
             <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-4 mt-6">
               {[
                 { name: 'Present', color: 'bg-emerald-500', val: stats?.present ?? 0 },
-                { name: 'ELITE', color: 'bg-amber-500', val: stats?.elite ?? 0 },
+                { name: 'Late', color: 'bg-amber-500', val: stats?.late ?? 0 },
                 { name: 'On Duty', color: 'bg-blue-500', val: stats?.od ?? 0 },
                 { name: 'Medical Leave', color: 'bg-purple-500', val: stats?.ml ?? 0 },
-                { name: 'Long Leave', color: 'bg-zinc-500', val: stats?.ll ?? 0 },
+                { name: 'Long Absent', color: 'bg-zinc-500', val: stats?.la ?? 0 },
                 { name: 'Absent', color: 'bg-rose-500', val: stats?.absent ?? 0 },
                 { name: 'Unmarked', color: 'bg-slate-750 border border-slate-700/50', val: unmarked },
               ].map((item) => (

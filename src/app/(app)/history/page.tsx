@@ -34,13 +34,27 @@ interface AttendanceMap {
 
 export default function HistoryPage() {
   const [students, setStudents] = useState<Student[]>([]);
-  const [date, setDate] = useState<string>(new Date().toISOString().split('T')[0]);
+  const today = new Date();
+  const [day, setDay] = useState<number>(today.getDate());
+  const [month, setMonth] = useState<number>(today.getMonth() + 1);
+  const [year, setYear] = useState<number>(today.getFullYear());
+  const [date, setDate] = useState<string>(today.toISOString().split('T')[0]);
+  
   const [period, setPeriod] = useState<number>(1);
   const [attendance, setAttendance] = useState<AttendanceMap>({});
   
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [savingState, setSavingState] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
+
+  // Update full date whenever day/month/year changes
+  useEffect(() => {
+    const d = new Date(year, month - 1, day);
+    // adjust for local timezone offset when getting ISO string
+    const offset = d.getTimezoneOffset();
+    const localDate = new Date(d.getTime() - (offset * 60 * 1000));
+    setDate(localDate.toISOString().split('T')[0]);
+  }, [day, month, year]);
 
   // Load students and active attendance for selected date/period
   const loadData = async () => {
@@ -119,10 +133,10 @@ export default function HistoryPage() {
   const countStats = {
     Present: Object.values(attendance).filter((s) => s === 'Present').length,
     Absent: Object.values(attendance).filter((s) => s === 'Absent').length,
-    ELITE: Object.values(attendance).filter((s) => s === 'ELITE').length,
-    'On Duty': Object.values(attendance).filter((s) => s === 'On Duty').length,
-    'Medical Leave': Object.values(attendance).filter((s) => s === 'Medical Leave').length,
-    'Long Leave': Object.values(attendance).filter((s) => s === 'Long Leave').length,
+    Late: Object.values(attendance).filter((s) => s === 'Late').length,
+    'On Duty (OD)': Object.values(attendance).filter((s) => s === 'On Duty (OD)').length,
+    'Medical Leave (ML)': Object.values(attendance).filter((s) => s === 'Medical Leave (ML)').length,
+    'Long Absent': Object.values(attendance).filter((s) => s === 'Long Absent').length,
     Unmarked: Object.values(attendance).filter((s) => s === 'Unmarked').length,
   };
 
@@ -141,17 +155,44 @@ export default function HistoryPage() {
         </div>
 
         <div className="flex flex-wrap gap-4 w-full lg:w-auto">
-          {/* Date Picker */}
-          <div className="flex-1 min-w-[160px]">
-            <label className="block text-[10px] uppercase font-bold tracking-wider text-slate-400 mb-1.5">
-              Select Date
-            </label>
-            <input
-              type="date"
-              value={date}
-              onChange={(e) => setDate(e.target.value)}
-              className="w-full px-3 py-2 bg-slate-950/50 border border-slate-700/50 rounded-xl text-slate-200 text-sm focus:outline-none focus:ring-1 focus:ring-indigo-500"
-            />
+          {/* Day/Month/Year Pickers */}
+          <div className="flex flex-wrap gap-2 min-w-[280px]">
+            <div className="flex-1">
+              <label className="block text-[10px] uppercase font-bold tracking-wider text-slate-400 mb-1.5">Day</label>
+              <select
+                value={day}
+                onChange={(e) => setDay(Number(e.target.value))}
+                className="w-full px-2 py-2 bg-slate-950/50 border border-slate-700/50 rounded-xl text-slate-200 text-sm focus:outline-none focus:ring-1 focus:ring-indigo-500 cursor-pointer"
+              >
+                {Array.from({ length: 31 }, (_, i) => i + 1).map(d => (
+                  <option key={d} value={d}>{d}</option>
+                ))}
+              </select>
+            </div>
+            <div className="flex-1">
+              <label className="block text-[10px] uppercase font-bold tracking-wider text-slate-400 mb-1.5">Month</label>
+              <select
+                value={month}
+                onChange={(e) => setMonth(Number(e.target.value))}
+                className="w-full px-2 py-2 bg-slate-950/50 border border-slate-700/50 rounded-xl text-slate-200 text-sm focus:outline-none focus:ring-1 focus:ring-indigo-500 cursor-pointer"
+              >
+                {Array.from({ length: 12 }, (_, i) => i + 1).map(m => (
+                  <option key={m} value={m}>{m}</option>
+                ))}
+              </select>
+            </div>
+            <div className="flex-1">
+              <label className="block text-[10px] uppercase font-bold tracking-wider text-slate-400 mb-1.5">Year</label>
+              <select
+                value={year}
+                onChange={(e) => setYear(Number(e.target.value))}
+                className="w-full px-2 py-2 bg-slate-950/50 border border-slate-700/50 rounded-xl text-slate-200 text-sm focus:outline-none focus:ring-1 focus:ring-indigo-500 cursor-pointer"
+              >
+                {[2024, 2025, 2026, 2027].map(y => (
+                  <option key={y} value={y}>{y}</option>
+                ))}
+              </select>
+            </div>
           </div>
 
           {/* Period Selector */}
@@ -210,10 +251,10 @@ export default function HistoryPage() {
           </span>
           <span className="text-emerald-400">P: {countStats.Present}</span>
           <span className="text-rose-400">A: {countStats.Absent}</span>
-          <span className="text-amber-400">E: {countStats.ELITE}</span>
-          <span className="text-blue-400">OD: {countStats.Present + countStats['On Duty']}</span>
-          <span className="text-purple-400">ML: {countStats.Present + countStats['Medical Leave']}</span>
-          <span className="text-slate-400">LL: {countStats.Present + countStats['Long Leave']}</span>
+          <span className="text-amber-400">L: {countStats.Late}</span>
+          <span className="text-blue-400">OD: {countStats['On Duty (OD)']}</span>
+          <span className="text-purple-400">ML: {countStats['Medical Leave (ML)']}</span>
+          <span className="text-slate-400">LA: {countStats['Long Absent']}</span>
           <span className="text-slate-500">Unmarked: {countStats.Unmarked}</span>
         </div>
       </div>
@@ -298,23 +339,23 @@ export default function HistoryPage() {
                             A
                           </button>
 
-                          {/* ELITE */}
+                          {/* Late */}
                           <button
-                            onClick={() => handleStatusChange(student.id, 'ELITE')}
+                            onClick={() => handleStatusChange(student.id, 'Late')}
                             className={`px-3 py-1.5 border rounded-xl text-xs font-bold transition-all cursor-pointer ${getStatusStyle(
-                              'ELITE',
+                              'Late',
                               currentStatus,
                               'bg-amber-600 hover:bg-amber-500'
                             )}`}
                           >
-                            ELITE
+                            L
                           </button>
 
                           {/* On Duty */}
                           <button
-                            onClick={() => handleStatusChange(student.id, 'On Duty')}
+                            onClick={() => handleStatusChange(student.id, 'On Duty (OD)')}
                             className={`px-3 py-1.5 border rounded-xl text-xs font-bold transition-all cursor-pointer ${getStatusStyle(
-                              'On Duty',
+                              'On Duty (OD)',
                               currentStatus,
                               'bg-blue-600 hover:bg-blue-500'
                             )}`}
@@ -324,9 +365,9 @@ export default function HistoryPage() {
 
                           {/* Medical Leave */}
                           <button
-                            onClick={() => handleStatusChange(student.id, 'Medical Leave')}
+                            onClick={() => handleStatusChange(student.id, 'Medical Leave (ML)')}
                             className={`px-3 py-1.5 border rounded-xl text-xs font-bold transition-all cursor-pointer ${getStatusStyle(
-                              'Medical Leave',
+                              'Medical Leave (ML)',
                               currentStatus,
                               'bg-purple-600 hover:bg-purple-500'
                             )}`}
@@ -334,16 +375,16 @@ export default function HistoryPage() {
                             ML
                           </button>
 
-                          {/* Long Leave */}
+                          {/* Long Absent */}
                           <button
-                            onClick={() => handleStatusChange(student.id, 'Long Leave')}
+                            onClick={() => handleStatusChange(student.id, 'Long Absent')}
                             className={`px-3 py-1.5 border rounded-xl text-xs font-bold transition-all cursor-pointer ${getStatusStyle(
-                              'Long Leave',
+                              'Long Absent',
                               currentStatus,
                               'bg-zinc-600 hover:bg-zinc-500'
                             )}`}
                           >
-                            LL
+                            LA
                           </button>
                         </div>
                       </td>

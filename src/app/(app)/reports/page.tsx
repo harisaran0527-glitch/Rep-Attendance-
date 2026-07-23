@@ -156,10 +156,10 @@ export default function ReportsPage() {
         'Total Classes': row.totalClasses,
         'Present': row.present,
         'Absent': row.absent,
-        'ELITE': row.elite,
-        'On Duty': row.od,
-        'Medical Leave': row.ml,
-        'Long Leave': row.ll,
+        'Late': row.late,
+        'On Duty (OD)': row.od,
+        'Medical Leave (ML)': row.ml,
+        'Long Absent': row.la,
         'Attendance %': `${row.percentage}%`,
       }));
     } else if (activeTab === 'student') {
@@ -227,7 +227,7 @@ export default function ReportsPage() {
       subtitle = `Subject-wise Report: ${subjectName} (Period ${subjectPeriod}) | Range: ${subjectStartDate} to ${subjectEndDate}`;
       headers = [[
         'Register No', 'Student Name', 'Dept', 'Yr/Sec', 'Total',
-        'Present', 'Absent', 'ELITE', 'OD', 'ML', 'LL', '%'
+        'Present', 'Absent', 'Late', 'OD', 'ML', 'LA', '%'
       ]];
       rows = reportData.map((row) => [
         row.registerNumber,
@@ -237,10 +237,10 @@ export default function ReportsPage() {
         row.totalClasses,
         row.present,
         row.absent,
-        row.elite,
+        row.late,
         row.od,
         row.ml,
-        row.ll,
+        row.la,
         `${row.percentage}%`
       ]);
     } else if (activeTab === 'student') {
@@ -499,9 +499,9 @@ export default function ReportsPage() {
                           let sColor = 'text-slate-500';
                           if (status === 'Present') sColor = 'text-emerald-400 font-bold';
                           if (status === 'Absent') sColor = 'text-rose-400 font-bold';
-                          if (status === 'ELITE') sColor = 'text-amber-400 font-bold';
-                          if (status === 'On Duty') sColor = 'text-blue-400 font-bold';
-                          if (status === 'Medical Leave') sColor = 'text-purple-400 font-bold';
+                          if (status === 'Late') sColor = 'text-amber-400 font-bold';
+                          if (status === 'On Duty (OD)') sColor = 'text-blue-400 font-bold';
+                          if (status === 'Medical Leave (ML)') sColor = 'text-purple-400 font-bold';
                           return (
                             <td key={p} className={`px-6 py-3.5 text-center ${sColor}`}>
                               {status === 'Unmarked' || status === '-' ? '-' : status}
@@ -524,10 +524,10 @@ export default function ReportsPage() {
                       <th className="px-6 py-4 text-center">Classes</th>
                       <th className="px-6 py-4 text-center">Present</th>
                       <th className="px-6 py-4 text-center">Absent</th>
-                      <th className="px-6 py-4 text-center">ELITE</th>
+                      <th className="px-6 py-4 text-center">Late</th>
                       <th className="px-6 py-4 text-center">OD</th>
                       <th className="px-6 py-4 text-center">ML</th>
-                      <th className="px-6 py-4 text-center">LL</th>
+                      <th className="px-6 py-4 text-center">LA</th>
                       <th className="px-6 py-4 text-right">Attended %</th>
                     </tr>
                   </thead>
@@ -539,10 +539,10 @@ export default function ReportsPage() {
                         <td className="px-6 py-3.5 text-center text-slate-300 font-semibold">{row.totalClasses}</td>
                         <td className="px-6 py-3.5 text-center text-emerald-400 font-semibold">{row.present}</td>
                         <td className="px-6 py-3.5 text-center text-rose-400 font-semibold">{row.absent}</td>
-                        <td className="px-6 py-3.5 text-center text-amber-400">{row.elite}</td>
+                        <td className="px-6 py-3.5 text-center text-amber-400">{row.late}</td>
                         <td className="px-6 py-3.5 text-center text-blue-400">{row.od}</td>
                         <td className="px-6 py-3.5 text-center text-purple-400">{row.ml}</td>
-                        <td className="px-6 py-3.5 text-center text-zinc-400">{row.ll}</td>
+                        <td className="px-6 py-3.5 text-center text-zinc-400">{row.la}</td>
                         <td className="px-6 py-3.5 text-right font-bold text-slate-100">{row.percentage}%</td>
                       </tr>
                     ))}
@@ -572,9 +572,9 @@ export default function ReportsPage() {
                           let sColor = 'text-slate-500';
                           if (status === 'Present') sColor = 'text-emerald-400 font-bold';
                           if (status === 'Absent') sColor = 'text-rose-400 font-bold';
-                          if (status === 'ELITE') sColor = 'text-amber-400 font-bold';
-                          if (status === 'On Duty') sColor = 'text-blue-400 font-bold';
-                          if (status === 'Medical Leave') sColor = 'text-purple-400 font-bold';
+                          if (status === 'Late') sColor = 'text-amber-400 font-bold';
+                          if (status === 'On Duty (OD)') sColor = 'text-blue-400 font-bold';
+                          if (status === 'Medical Leave (ML)') sColor = 'text-purple-400 font-bold';
                           return (
                             <td key={p} className={`px-6 py-3.5 text-center ${sColor}`}>
                               {status === 'Unmarked' || status === '-' ? '-' : status}

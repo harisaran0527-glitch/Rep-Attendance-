@@ -14,6 +14,8 @@ import {
   Menu,
   X,
   User,
+  Mail,
+  Settings as SettingsIcon,
 } from 'lucide-react';
 
 interface AppLayoutClientProps {
@@ -31,6 +33,8 @@ export default function AppLayoutClient({ children }: AppLayoutClientProps) {
     { name: 'Take Attendance', href: '/attendance', icon: CalendarCheck },
     { name: 'Attendance History', href: '/history', icon: History },
     { name: 'Reports', href: '/reports', icon: FileBarChart },
+    { name: 'Email Logs', href: '/emaillogs', icon: Mail },
+    { name: 'Settings', href: '/settings', icon: SettingsIcon },
   ];
 
   const getPageTitle = () => {
