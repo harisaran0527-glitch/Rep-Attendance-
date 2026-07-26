@@ -105,7 +105,7 @@ export async function getAllStudentsWithStats() {
     const results = students.map((student) => {
       const attended = presentCountMap[student.id] || 0;
       const percentage = totalWorkingDays > 0 
-        ? Math.round((attended / totalWorkingDays) * 1000) / 10 
+        ? Math.round((attended / totalWorkingDays) * 10000) / 100 
         : 100.0;
 
       return {

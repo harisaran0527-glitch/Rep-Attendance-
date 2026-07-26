@@ -184,10 +184,10 @@ export async function calculateOverallAttendance(studentId: number, targetDateIn
   // Total Days Absent (working days minus present days)
   const daysAbsent = Math.max(0, totalWorkingDays - daysPresent);
   
-  // Rule: Before attendance starts (0 marked dates), display 100%. Once attendance starts (1+ marked dates), calculate real percentage.
+  // Rule: Before attendance starts (0 marked dates), display 100%. Once attendance starts (1+ marked dates), calculate real percentage to 2 decimal places.
   const percentage = totalWorkingDays === 0 
     ? 100.0 
-    : Math.round((daysPresent / totalWorkingDays) * 1000) / 10;
+    : Math.round((daysPresent / totalWorkingDays) * 10000) / 100;
 
   return {
     percentage,

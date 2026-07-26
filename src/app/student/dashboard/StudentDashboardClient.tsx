@@ -407,17 +407,17 @@ export default function StudentDashboardClient({
               </div>
             </div>
 
-            {/* Total Recorded */}
+            {/* Total Working Days */}
             <div className="bg-slate-900/60 border border-slate-800/80 rounded-3xl p-5 backdrop-blur-md flex flex-col justify-between shadow-xl">
               <div>
-                <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Total Recorded</span>
+                <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Total Working Days</span>
                 <div className="mt-3 flex items-baseline gap-1">
-                  <span className="text-3xl font-extrabold text-indigo-400 tracking-tight">{stats.totalDays ?? 0}</span>
+                  <span className="text-3xl font-extrabold text-indigo-400 tracking-tight">{stats.totalDays ?? stats.totalClasses ?? 0}</span>
                   <span className="text-xs text-slate-400">days</span>
                 </div>
               </div>
               <div className="mt-4 pt-3 border-t border-slate-800/80 flex items-center text-[11px] text-slate-400">
-                <Calendar className="w-3.5 h-3.5 mr-1 text-indigo-400" /> Total days
+                <Calendar className="w-3.5 h-3.5 mr-1 text-indigo-400" /> Completed working days
               </div>
             </div>
 
