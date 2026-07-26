@@ -51,6 +51,7 @@ export async function getSmtpSettings() {
       senderName: 'College Attendance Portal',
       senderEmail: '',
       lowThreshold: 75.0,
+      collegeOpeningDate: '2026-07-13',
     },
   });
 }
@@ -64,6 +65,7 @@ export async function updateSmtpSettings(data: {
   senderName: string;
   senderEmail: string;
   lowThreshold: number;
+  collegeOpeningDate?: string;
 }) {
   const updateData: any = {
     host: data.host.trim(),
@@ -77,6 +79,10 @@ export async function updateSmtpSettings(data: {
 
   if (data.password !== undefined) {
     updateData.password = data.password;
+  }
+
+  if (data.collegeOpeningDate !== undefined) {
+    updateData.collegeOpeningDate = data.collegeOpeningDate.trim();
   }
 
   return prisma.smtpSettings.update({
@@ -109,43 +115,77 @@ export async function logSentEmail(data: {
   });
 }
 
-export async function calculateOverallAttendance(studentId: number) {
-  // Query attendance ONLY for this specific student from 13/07/2026 onwards
+export async function getWorkingDaysCount(startDateStr: string, endDateStr?: string) {
+  const start = normalizeDate(startDateStr);
+  const now = normalizeDate(new Date());
+  const requestedEnd = endDateStr ? normalizeDate(endDateStr) : now;
+  // Ensure future dates are never counted
+  const end = requestedEnd.getTime() > now.getTime() ? now : requestedEnd;
+
+  if (start.getTime() > end.getTime()) {
+    return 0;
+  }
+
+  // Count ONLY distinct dates for which attendance has actually been marked in DB
+  const distinctMarked = await prisma.attendance.findMany({
+    where: {
+      date: {
+        gte: start,
+        lte: end,
+      },
+    },
+    select: {
+      date: true,
+    },
+    distinct: ['date'],
+  });
+
+  return distinctMarked.length;
+}
+
+export async function calculateOverallAttendance(studentId: number, targetDateInput?: Date | string) {
+  const settings = await getSmtpSettings();
+  const openingDateStr = settings.collegeOpeningDate || '2026-07-13';
+  const openingDate = normalizeDate(openingDateStr);
+
+  const now = normalizeDate(new Date());
+  const requestedTarget = targetDateInput ? normalizeDate(targetDateInput) : now;
+  const targetDate = requestedTarget.getTime() > now.getTime() ? now : requestedTarget;
+
+  // Total distinct marked attendance dates in system from opening date up to target date
+  const totalWorkingDays = await getWorkingDaysCount(openingDateStr, targetDate.toISOString().split('T')[0]);
+
+  // Query attendance ONLY for this specific student from openingDate up to targetDate
   const attendances = await prisma.attendance.findMany({
     where: { 
       studentId,
       date: {
-        gte: ATTENDANCE_START_DATE,
+        gte: openingDate,
+        lte: targetDate,
       },
     },
   });
-
-  if (attendances.length === 0) {
-    return { percentage: 100.0, attended: 0, total: 0, absent: 0, daysPresent: 0, daysAbsent: 0, totalDays: 0 };
-  }
 
   const attendedStatuses = ['Present', 'Late', 'On Duty (OD)', 'Medical Leave (ML)'];
   
   // Total Days Present for THIS individual student
   const daysPresent = attendances.filter((a) => attendedStatuses.includes(a.status)).length;
   
-  // Total Days Recorded for THIS individual student
-  const totalDays = attendances.length;
+  // Total Days Absent (working days minus present days)
+  const daysAbsent = Math.max(0, totalWorkingDays - daysPresent);
   
-  // Total Days Absent for THIS individual student
-  const daysAbsent = totalDays - daysPresent;
-  
-  // Formula: (Student's Total Present Days / Total Recorded Days) * 100
-  const percentage = Math.round((daysPresent / totalDays) * 1000) / 10;
+  // Formula: (Student's Total Present Days / Total Marked Working Days) * 100
+  const percentage = totalWorkingDays > 0 ? Math.round((daysPresent / totalWorkingDays) * 1000) / 10 : 100.0;
 
   return {
     percentage,
     attended: daysPresent,
-    total: totalDays,
+    total: totalWorkingDays,
     absent: daysAbsent,
     daysPresent,
     daysAbsent,
-    totalDays,
+    totalDays: totalWorkingDays,
+    openingDate: openingDateStr,
   };
 }
 

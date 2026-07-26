@@ -67,6 +67,7 @@ model SmtpSettings {
   senderName   String  @default("College Attendance Portal")
   senderEmail  String  @default("")
   lowThreshold Float   @default(75.0)
+  collegeOpeningDate String   @default("2026-07-13")
 }
 
 model Teacher {

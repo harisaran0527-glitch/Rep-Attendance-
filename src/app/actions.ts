@@ -250,6 +250,7 @@ export async function updateSmtpSettingsAction(data: {
   senderName: string;
   senderEmail: string;
   lowThreshold: number;
+  collegeOpeningDate?: string;
 }) {
   if (!(await isAdminAuthenticated())) {
     throw new Error('Unauthorized');
@@ -376,6 +377,7 @@ export async function saveBulkAttendanceAction(
     revalidatePath('/attendance');
     revalidatePath('/history');
     revalidatePath('/dashboard');
+    revalidatePath('/student/dashboard');
     return { success: true };
   } catch (error) {
     console.error('Bulk attendance save error:', error);

@@ -49,6 +49,7 @@ export default function SettingsPage() {
   const [senderName, setSenderName] = useState('College Attendance Portal');
   const [senderEmail, setSenderEmail] = useState('');
   const [lowThreshold, setLowThreshold] = useState(75.0);
+  const [collegeOpeningDate, setCollegeOpeningDate] = useState('2026-07-13');
 
   // Teachers State
   const [teachers, setTeachers] = useState<Teacher[]>([]);
@@ -78,6 +79,7 @@ export default function SettingsPage() {
         setSenderName(settings.senderName);
         setSenderEmail(settings.senderEmail);
         setLowThreshold(settings.lowThreshold);
+        setCollegeOpeningDate(settings.collegeOpeningDate || '2026-07-13');
       }
       const tList = await getTeachersAction();
       setTeachers(tList);
@@ -107,6 +109,7 @@ export default function SettingsPage() {
       senderName,
       senderEmail,
       lowThreshold,
+      collegeOpeningDate,
     };
 
     if (password) {
@@ -288,6 +291,23 @@ export default function SettingsPage() {
                   </div>
                   <p className="text-[10px] text-slate-500 mt-1">
                     Students falling below this percentage will be automatically emailed warnings.
+                  </p>
+                </div>
+
+                {/* College Opening Date */}
+                <div>
+                  <label className="block text-xs font-bold uppercase tracking-wider text-slate-400 mb-1.5">
+                    College Opening Date (First Day of Term) *
+                  </label>
+                  <input
+                    type="date"
+                    required
+                    value={collegeOpeningDate}
+                    onChange={(e) => setCollegeOpeningDate(e.target.value)}
+                    className="block w-full px-3.5 py-2.5 bg-slate-950/50 border border-slate-700/50 rounded-xl text-slate-200 focus:outline-none focus:ring-1 focus:ring-indigo-500 text-sm font-semibold cursor-pointer"
+                  />
+                  <p className="text-[10px] text-slate-500 mt-1">
+                    Baseline start date used for calculating cumulative working days and overall attendance percentages.
                   </p>
                 </div>
 
