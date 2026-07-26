@@ -403,69 +403,83 @@ export async function saveBulkAttendanceAction(
   }
 
   try {
-    const targetDate = new Date(dateString);
-    await prisma.$transaction(
-      records.map((r) =>
-        prisma.attendance.upsert({
-          where: {
-            studentId_date: {
-              studentId: r.studentId,
-              date: normalizeDate(targetDate),
-            },
-          },
-          update: { status: r.status, period: 1 },
-          create: {
-            studentId: r.studentId,
-            date: normalizeDate(targetDate),
-            period: 1,
-            status: r.status,
-          },
-        })
-      )
+    const targetDateNorm = normalizeDate(new Date(dateString));
+
+    // Fast 2-query atomic transaction (deleteMany + createMany)
+    await prisma.$transaction([
+      prisma.attendance.deleteMany({
+        where: { date: targetDateNorm },
+      }),
+      prisma.attendance.createMany({
+        data: records.map((r) => ({
+          studentId: r.studentId,
+          date: targetDateNorm,
+          period: 1,
+          status: r.status,
+        })),
+      }),
+    ]);
+
+    // Trigger non-blocking background email warning processing
+    processWarningEmailsBackground(dateString, records).catch((err) =>
+      console.error('Background email notification error:', err)
     );
 
-    // Auto warning email alerts trigger block (Active when totalWorkingDays >= 1)
+    revalidatePath('/attendance');
+    revalidatePath('/history');
+    revalidatePath('/dashboard');
+    revalidatePath('/student/dashboard');
+    return { success: true };
+  } catch (error) {
+    console.error('Bulk attendance save error:', error);
+    return { success: false, error: 'Failed to save attendance.' };
+  }
+}
+
+async function processWarningEmailsBackground(
+  dateString: string,
+  records: { studentId: number; status: AttendanceStatus }[]
+) {
+  try {
     const settings = await getSmtpSettings();
     const openingDateStr = settings.collegeOpeningDate || '2026-07-13';
     const totalWorkingDays = await getWorkingDaysCount(openingDateStr, dateString);
 
-    if (totalWorkingDays >= 1) {
-      const affectedStudentIds = Array.from(new Set(records.map((r) => r.studentId)));
-      const markedDateNorm = normalizeDate(new Date(dateString));
+    if (totalWorkingDays < 1) return;
 
-      for (const studentId of affectedStudentIds) {
-        try {
-          const { percentage, attended, total } = await calculateOverallAttendance(studentId, dateString);
-          if (percentage < settings.lowThreshold) {
-            // Check if warning was already sent for this student for this marked attendance date
-            const warnedForDate = await prisma.emailLog.findFirst({
-              where: {
-                studentId,
-                sentAt: {
-                  gte: markedDateNorm,
-                },
-              },
+    const affectedStudentIds = Array.from(new Set(records.map((r) => r.studentId)));
+    const markedDateNorm = normalizeDate(new Date(dateString));
+
+    for (const studentId of affectedStudentIds) {
+      try {
+        const { percentage, attended, total } = await calculateOverallAttendance(studentId, dateString);
+        if (percentage < settings.lowThreshold) {
+          const warnedForDate = await prisma.emailLog.findFirst({
+            where: {
+              studentId,
+              sentAt: { gte: markedDateNorm },
+            },
+          });
+
+          if (!warnedForDate) {
+            const student = await prisma.student.findUnique({
+              where: { id: studentId },
             });
 
-            if (!warnedForDate) {
-              const student = await prisma.student.findUnique({
-                where: { id: studentId },
-              });
+            if (student && student.email) {
+              const emailResult = await sendLowAttendanceEmail(
+                student.studentName,
+                student.email,
+                percentage,
+                settings.lowThreshold,
+                settings,
+                attended,
+                total,
+                student.registerNumber
+              );
 
-              if (student && student.email) {
-                const emailResult = await sendLowAttendanceEmail(
-                  student.studentName,
-                  student.email,
-                  percentage,
-                  settings.lowThreshold,
-                  settings,
-                  attended,
-                  total,
-                  student.registerNumber
-                );
-
-                const subjectText = `Attendance Warning – Below 75%`;
-                const bodyText = `Dear ${student.studentName},
+              const subjectText = `Attendance Warning – Below 75%`;
+              const bodyText = `Dear ${student.studentName},
 
 Your current attendance percentage is ${percentage}%, which is below the required 75%.
 
@@ -477,32 +491,23 @@ Current Attendance: ${percentage}%
 Regards,
 Class Representative`;
 
-                await logSentEmail({
-                  studentId,
-                  email: student.email,
-                  percentage,
-                  subject: subjectText,
-                  body: bodyText,
-                  status: emailResult.status === 'Sent' ? 'Sent' : emailResult.status === 'Simulated' ? 'Simulated' : 'Failed',
-                });
-              }
+              await logSentEmail({
+                studentId,
+                email: student.email,
+                percentage,
+                subject: subjectText,
+                body: bodyText,
+                status: emailResult.status === 'Sent' ? 'Sent' : emailResult.status === 'Simulated' ? 'Simulated' : 'Failed',
+              });
             }
           }
-        } catch (emailErr) {
-          console.error(`Email notification warning failed for student ${studentId}:`, emailErr);
-          // Never break attendance saving even if email sending encounters an error!
         }
+      } catch (emailErr) {
+        console.error(`Background warning email error for student ${studentId}:`, emailErr);
       }
     }
-
-    revalidatePath('/attendance');
-    revalidatePath('/history');
-    revalidatePath('/dashboard');
-    revalidatePath('/student/dashboard');
-    return { success: true };
-  } catch (error) {
-    console.error('Bulk attendance save error:', error);
-    return { success: false, error: 'Failed to save attendance.' };
+  } catch (err) {
+    console.error('Error in processWarningEmailsBackground:', err);
   }
 }
 
