@@ -25,7 +25,6 @@ export type PeriodNumber = 1 | 2 | 3 | 4 | 5;
 export const ATTENDANCE_STATUSES = [
   'Present',
   'Absent',
-  'Late',
   'On Duty (OD)',
   'Medical Leave (ML)',
   'Long Absent'
@@ -176,7 +175,7 @@ export async function calculateOverallAttendance(studentId: number, targetDateIn
     },
   });
 
-  const attendedStatuses = ['Present', 'Late', 'On Duty (OD)', 'Medical Leave (ML)'];
+  const attendedStatuses = ['Present', 'On Duty (OD)'];
   
   // Total Days Present for THIS individual student
   const daysPresent = attendances.filter((a) => attendedStatuses.includes(a.status)).length;

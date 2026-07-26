@@ -146,7 +146,6 @@ export default function HistoryPage() {
   const countStats = {
     Present: Object.values(attendance).filter((s) => s === 'Present').length,
     Absent: Object.values(attendance).filter((s) => s === 'Absent').length,
-    Late: Object.values(attendance).filter((s) => s === 'Late').length,
     'On Duty (OD)': Object.values(attendance).filter((s) => s === 'On Duty (OD)').length,
     'Medical Leave (ML)': Object.values(attendance).filter((s) => s === 'Medical Leave (ML)').length,
     'Long Absent': Object.values(attendance).filter((s) => s === 'Long Absent').length,
@@ -246,7 +245,6 @@ export default function HistoryPage() {
           </span>
           <span className="text-emerald-400 font-bold">Present: {countStats.Present}</span>
           <span className="text-rose-400 font-bold">Absent: {countStats.Absent}</span>
-          <span className="text-amber-400 font-medium">Late: {countStats.Late}</span>
           <span className="text-blue-400 font-medium">OD: {countStats['On Duty (OD)']}</span>
           <span className="text-purple-400 font-medium">ML: {countStats['Medical Leave (ML)']}</span>
           <span className="text-slate-400 font-medium">LA: {countStats['Long Absent']}</span>
@@ -341,18 +339,6 @@ export default function HistoryPage() {
                             )}`}
                           >
                             Absent
-                          </button>
-
-                          {/* Late */}
-                          <button
-                            onClick={() => handleStatusChange(student.id, 'Late')}
-                            className={`px-3 py-2 border rounded-xl text-xs font-bold transition-all cursor-pointer ${getStatusStyle(
-                              'Late',
-                              currentStatus,
-                              'bg-amber-600 hover:bg-amber-500'
-                            )}`}
-                          >
-                            Late
                           </button>
 
                           {/* On Duty */}

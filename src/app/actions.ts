@@ -91,7 +91,7 @@ export async function getAllStudentsWithStats() {
       },
     });
 
-    const attendedStatuses = ['Present', 'Late', 'On Duty (OD)', 'Medical Leave (ML)'];
+    const attendedStatuses = ['Present', 'On Duty (OD)'];
 
     // Map present count per studentId
     const presentCountMap: Record<number, number> = {};
@@ -554,7 +554,6 @@ export async function getDashboardStatsAction(dateString: string) {
   const counts = {
     Present: 0,
     Absent: 0,
-    Late: 0,
     'On Duty (OD)': 0,
     'Medical Leave (ML)': 0,
     'Long Absent': 0,
@@ -570,7 +569,7 @@ export async function getDashboardStatsAction(dateString: string) {
     totalStudents,
     present: counts['Present'],
     absent: counts['Absent'],
-    late: counts['Late'],
+    late: 0,
     od: counts['On Duty (OD)'],
     ml: counts['Medical Leave (ML)'],
     la: counts['Long Absent'],
@@ -651,7 +650,6 @@ export async function getSubjectWiseReportAction(startDateStr: string, endDateSt
     const counts = {
       Present: 0,
       Absent: 0,
-      Late: 0,
       'On Duty (OD)': 0,
       'Medical Leave (ML)': 0,
       'Long Absent': 0,
@@ -663,8 +661,8 @@ export async function getSubjectWiseReportAction(startDateStr: string, endDateSt
       }
     });
 
-    // Attendance rate = (Present + Late + OD + ML) / Total marked * 100
-    const attended = counts['Present'] + counts['Late'] + counts['On Duty (OD)'] + counts['Medical Leave (ML)'];
+    // Attendance rate = (Present + OD) / Total marked * 100
+    const attended = counts['Present'] + counts['On Duty (OD)'];
     const percentage = totalPeriods > 0 ? Math.round((attended / totalPeriods) * 100) : 0;
 
     return {
@@ -676,7 +674,7 @@ export async function getSubjectWiseReportAction(startDateStr: string, endDateSt
       totalClasses: totalPeriods,
       present: counts['Present'],
       absent: counts['Absent'],
-      late: counts['Late'],
+      late: 0,
       od: counts['On Duty (OD)'],
       ml: counts['Medical Leave (ML)'],
       la: counts['Long Absent'],
@@ -915,7 +913,7 @@ export async function getStudentMonthlyStatsAction() {
     }
 
     monthlyData[yearMonth].total++;
-    const attendedStatuses = ['Present', 'Late', 'On Duty (OD)', 'Medical Leave (ML)'];
+    const attendedStatuses = ['Present', 'On Duty (OD)'];
     if (attendedStatuses.includes(a.status)) {
       monthlyData[yearMonth].attended++;
     }

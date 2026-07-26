@@ -134,8 +134,6 @@ export default function StudentDashboardClient({
         return <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium bg-emerald-500/10 text-emerald-400 border border-emerald-500/20"><CheckCircle2 className="w-3.5 h-3.5" /> Present</span>;
       case 'Absent':
         return <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium bg-rose-500/10 text-rose-450 border border-rose-500/20"><XCircle className="w-3.5 h-3.5" /> Absent</span>;
-      case 'Late':
-        return <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium bg-amber-500/10 text-amber-400 border border-amber-500/20"><Clock className="w-3.5 h-3.5" /> Late</span>;
       case 'On Duty (OD)':
         return <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium bg-sky-500/10 text-sky-400 border border-sky-500/20"><Award className="w-3.5 h-3.5" /> On Duty</span>;
       case 'Medical Leave (ML)':
@@ -213,9 +211,6 @@ export default function StudentDashboardClient({
         } else if (hasOD) {
           bgClass = 'bg-sky-950/30 text-sky-400 border-sky-500/30 hover:bg-sky-900/30';
           titleText = `${dayRecords.length} classes marked (On Duty)`;
-        } else if (hasLate) {
-          bgClass = 'bg-amber-950/30 text-amber-400 border-amber-500/30 hover:bg-amber-900/30';
-          titleText = `${dayRecords.length} classes marked (Late)`;
         } else {
           bgClass = 'bg-emerald-950/30 text-emerald-400 border-emerald-500/30 hover:bg-emerald-900/30';
           titleText = `${dayRecords.length} classes marked (Present)`;
@@ -613,7 +608,7 @@ export default function StudentDashboardClient({
 
               <div className="flex items-center gap-2 w-full sm:w-auto overflow-x-auto pb-1 sm:pb-0 font-sans">
                 <Filter className="w-4 h-4 text-slate-400 shrink-0" />
-                {['ALL', 'Present', 'Absent', 'Late', 'On Duty (OD)', 'Medical Leave (ML)'].map((st) => (
+                {['ALL', 'Present', 'Absent', 'On Duty (OD)', 'Medical Leave (ML)', 'Long Absent'].map((st) => (
                   <button
                     key={st}
                     onClick={() => setStatusFilter(st)}

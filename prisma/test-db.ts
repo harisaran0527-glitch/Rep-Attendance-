@@ -80,11 +80,11 @@ async function test() {
   const att2 = await saveAttendance(student2.id, testDate, 1, 'Absent');
   console.log(`Saved Attendance for ${student2.studentName}: Period 1 -> ${att2.status}`);
 
-  // 6. Test Upsert (Save attendance again for Alice, Period 1 with status Late)
-  console.log('Testing Upsert (changing Alice to Late)...');
-  const att1Updated = await saveAttendance(student1.id, testDate, 1, 'Late');
+  // 6. Test Upsert (Save attendance again for Alice, Period 1 with status On Duty (OD))
+  console.log('Testing Upsert (changing Alice to On Duty (OD))...');
+  const att1Updated = await saveAttendance(student1.id, testDate, 1, 'On Duty (OD)');
   console.log(`Updated Attendance for ${student1.studentName}: Period 1 -> ${att1Updated.status}`);
-  if (att1Updated.status !== 'Late') {
+  if (att1Updated.status !== 'On Duty (OD)') {
     throw new Error('Upsert status update failed');
   }
 

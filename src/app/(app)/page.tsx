@@ -121,13 +121,6 @@ export default function DashboardPage() {
       iconColor: 'text-rose-400 bg-rose-500/10',
     },
     {
-      name: 'Late',
-      value: stats?.late ?? 0,
-      icon: Clock,
-      color: 'from-amber-600/10 to-amber-800/10 border-amber-500/20 text-amber-400',
-      iconColor: 'text-amber-400 bg-amber-500/10',
-    },
-    {
       name: 'On Duty (OD)',
       value: stats?.od ?? 0,
       icon: Briefcase,
@@ -421,11 +414,6 @@ export default function DashboardPage() {
                     title={`Present: ${stats.present}`}
                   />
                   <div
-                    style={{ width: getPercentage(stats.late) }}
-                    className="bg-amber-500 h-full transition-all duration-500"
-                    title={`Late: ${stats.late}`}
-                  />
-                  <div
                     style={{ width: getPercentage(stats.od) }}
                     className="bg-blue-500 h-full transition-all duration-500"
                     title={`On Duty: ${stats.od}`}
@@ -460,7 +448,6 @@ export default function DashboardPage() {
             <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-4 mt-6">
               {[
                 { name: 'Present', color: 'bg-emerald-500', val: stats?.present ?? 0 },
-                { name: 'Late', color: 'bg-amber-500', val: stats?.late ?? 0 },
                 { name: 'On Duty', color: 'bg-blue-500', val: stats?.od ?? 0 },
                 { name: 'Medical Leave', color: 'bg-purple-500', val: stats?.ml ?? 0 },
                 { name: 'Long Absent', color: 'bg-zinc-500', val: stats?.la ?? 0 },
@@ -537,7 +524,6 @@ export default function DashboardPage() {
                       let sColor = 'text-slate-400';
                       if (act.status === 'Present') sColor = 'text-emerald-400 font-semibold';
                       if (act.status === 'Absent') sColor = 'text-rose-400 font-semibold';
-                      if (act.status === 'Late') sColor = 'text-amber-400 font-semibold';
                       if (act.status === 'On Duty (OD)') sColor = 'text-blue-400 font-semibold';
                       if (act.status === 'Medical Leave (ML)') sColor = 'text-purple-400 font-semibold';
                       if (act.status === 'Long Absent') sColor = 'text-zinc-500 font-semibold';

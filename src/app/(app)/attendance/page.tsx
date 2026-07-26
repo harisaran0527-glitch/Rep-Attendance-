@@ -37,7 +37,6 @@ const NON_PRESENT_STATUSES: AttendanceStatus[] = [
   'Absent',
   'Medical Leave (ML)',
   'Long Absent',
-  'Leave' as any,
 ];
 
 export default function AttendancePage() {
@@ -382,18 +381,6 @@ export default function AttendancePage() {
                             )}`}
                           >
                             Absent
-                          </button>
-
-                          {/* Late */}
-                          <button
-                            onClick={() => handleStatusChange(student.id, 'Late')}
-                            className={`px-3 py-2 border rounded-xl text-xs font-bold transition-all cursor-pointer ${getStatusStyle(
-                              'Late',
-                              currentStatus,
-                              'bg-amber-600 hover:bg-amber-500'
-                            )}`}
-                          >
-                            Late
                           </button>
 
                           {/* On Duty */}
