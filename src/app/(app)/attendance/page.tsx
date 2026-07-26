@@ -5,6 +5,7 @@ import {
   getAllStudentsWithStats,
   getAttendanceForDateAction,
   saveBulkAttendanceAction,
+  clearSavedAttendanceAction,
 } from '@/app/actions';
 import { AttendanceStatus } from '@/lib/db-api';
 import {
@@ -17,6 +18,11 @@ import {
   Save,
   CheckCheck,
   HelpCircle,
+  RotateCcw,
+  X,
+  Trash2,
+  ShieldAlert,
+  XCircle,
 } from 'lucide-react';
 
 interface Student {
@@ -52,6 +58,15 @@ export default function AttendancePage() {
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
+  // PART 2: Reset All Unsaved modal state
+  const [showResetModal, setShowResetModal] = useState(false);
+
+  // PART 3: Clear Saved Attendance modal state
+  const [showClearSavedModal, setShowClearSavedModal] = useState(false);
+  const [clearConfirmText, setClearConfirmText] = useState('');
+  const [isClearing, setIsClearing] = useState(false);
+  const [savedRecordCount, setSavedRecordCount] = useState(0);
+
   // Load students & existing attendance for selected date
   const loadData = async () => {
     setLoading(true);
@@ -65,10 +80,13 @@ export default function AttendancePage() {
       if (attResult.success && attResult.data && Object.keys(attResult.data).length > 0) {
         setIsExisting(true);
         const newMap: AttendanceMap = {};
+        let count = 0;
         studentsData.forEach((student: Student) => {
           newMap[student.id] = attResult.data![student.id] || 'Unmarked';
+          if (attResult.data![student.id]) count++;
         });
         setAttendance(newMap);
+        setSavedRecordCount(count);
       } else {
         setIsExisting(false);
         const newMap: AttendanceMap = {};
@@ -76,6 +94,7 @@ export default function AttendancePage() {
           newMap[student.id] = 'Unmarked';
         });
         setAttendance(newMap);
+        setSavedRecordCount(0);
       }
     } catch (error) {
       console.error('Failed to load attendance page data:', error);
@@ -94,6 +113,12 @@ export default function AttendancePage() {
     setSuccessMsg(null);
   };
 
+  // PART 1: Clear one student's status back to Unmarked
+  const handleClearStudent = (studentId: number) => {
+    setAttendance((prev) => ({ ...prev, [studentId]: 'Unmarked' }));
+    setSuccessMsg(null);
+  };
+
   // Shortcut: Mark all students Present
   const handleMarkAllPresent = () => {
     const updated: AttendanceMap = {};
@@ -104,14 +129,61 @@ export default function AttendancePage() {
     setSuccessMsg(null);
   };
 
+  // PART 2: Reset all unsaved selections
+  const handleResetAllUnsaved = () => {
+    const newMap: AttendanceMap = {};
+    students.forEach((s) => {
+      newMap[s.id] = 'Unmarked';
+    });
+    setAttendance(newMap);
+    setShowResetModal(false);
+    setSuccessMsg('All attendance selections have been reset to Not Marked.');
+  };
+
+  // PART 3: Clear saved attendance from database
+  const handleClearSavedAttendance = async () => {
+    if (clearConfirmText !== 'CLEAR') return;
+    setIsClearing(true);
+    setSuccessMsg(null);
+    setErrorMsg(null);
+
+    try {
+      const result = await clearSavedAttendanceAction(date);
+      if (result.success) {
+        setIsExisting(false);
+        setSavedRecordCount(0);
+        // Reset all students to Unmarked
+        const newMap: AttendanceMap = {};
+        students.forEach((s) => {
+          newMap[s.id] = 'Unmarked';
+        });
+        setAttendance(newMap);
+        // Refresh student percentages
+        const updatedStudents = await getAllStudentsWithStats();
+        setStudents(updatedStudents);
+        setSuccessMsg(`Successfully cleared ${result.deletedCount} saved attendance records for ${date}.`);
+      } else {
+        setErrorMsg(result.error || 'Failed to clear saved attendance.');
+      }
+    } catch (err) {
+      setErrorMsg('An error occurred while clearing saved attendance.');
+    } finally {
+      setIsClearing(false);
+      setShowClearSavedModal(false);
+      setClearConfirmText('');
+    }
+  };
+
   // Validation: Check if all students have been assigned a status
   const isAllMarked =
     students.length > 0 &&
     students.every((s) => attendance[s.id] && attendance[s.id] !== 'Unmarked');
 
-  const unmarkedCount = students.filter(
-    (s) => !attendance[s.id] || attendance[s.id] === 'Unmarked'
+  const markedCount = students.filter(
+    (s) => attendance[s.id] && attendance[s.id] !== 'Unmarked'
   ).length;
+
+  const unmarkedCount = students.length - markedCount;
 
   // Filter absent / non-present students
   const absentStudents = students.filter((s) => {
@@ -139,6 +211,7 @@ export default function AttendancePage() {
           : 'Attendance saved successfully.';
         setSuccessMsg(msg);
         setIsExisting(true);
+        setSavedRecordCount(students.length);
         // Refresh student percentages & stats
         const updatedStudents = await getAllStudentsWithStats();
         setStudents(updatedStudents);
@@ -173,6 +246,9 @@ export default function AttendancePage() {
     );
   });
 
+  // Check if any student has been marked (for enabling Reset Attendance button)
+  const hasAnyMarked = markedCount > 0;
+
   return (
     <div className="space-y-6 max-w-7xl mx-auto pb-24">
       {/* Header Card */}
@@ -201,16 +277,44 @@ export default function AttendancePage() {
             />
           </div>
 
-          {/* Shortcut Button */}
-          <div className="sm:self-end">
+          {/* Action Buttons Row */}
+          <div className="flex items-center gap-2 sm:self-end">
+            {/* Shortcut: Mark All Present */}
             <button
               onClick={handleMarkAllPresent}
               disabled={loading || students.length === 0}
-              className="w-full sm:w-auto flex items-center justify-center gap-2 px-4 py-2.5 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-300 font-semibold rounded-xl text-xs border border-emerald-500/20 transition-colors cursor-pointer disabled:opacity-50"
+              className="flex items-center justify-center gap-2 px-4 py-2.5 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-300 font-semibold rounded-xl text-xs border border-emerald-500/20 transition-colors cursor-pointer disabled:opacity-50"
             >
               <CheckCheck className="w-4 h-4 text-emerald-400" />
               <span>Mark All Present</span>
             </button>
+
+            {/* PART 2: Reset Attendance Button */}
+            <button
+              onClick={() => setShowResetModal(true)}
+              disabled={loading || !hasAnyMarked}
+              className="flex items-center justify-center gap-2 px-4 py-2.5 bg-amber-500/10 hover:bg-amber-500/20 text-amber-300 font-semibold rounded-xl text-xs border border-amber-500/20 transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+              title="Reset all unsaved attendance selections"
+            >
+              <RotateCcw className="w-4 h-4 text-amber-400" />
+              <span>Reset Attendance</span>
+            </button>
+
+            {/* PART 3: Clear Saved Attendance Button (only when saved data exists) */}
+            {isExisting && (
+              <button
+                onClick={() => {
+                  setClearConfirmText('');
+                  setShowClearSavedModal(true);
+                }}
+                disabled={loading}
+                className="flex items-center justify-center gap-2 px-4 py-2.5 bg-rose-500/10 hover:bg-rose-500/20 text-rose-300 font-semibold rounded-xl text-xs border border-rose-500/20 transition-colors cursor-pointer disabled:opacity-50"
+                title="Delete saved attendance for this session from database"
+              >
+                <Trash2 className="w-4 h-4 text-rose-400" />
+                <span>Clear Saved Attendance</span>
+              </button>
+            )}
           </div>
         </div>
       </div>
@@ -230,7 +334,7 @@ export default function AttendancePage() {
         </div>
       )}
 
-      {/* PART 2 & 3: ABSENTEES STUDENT SUMMARY CARD */}
+      {/* ABSENTEES STUDENT SUMMARY CARD */}
       <div className="glass p-6 rounded-2xl border border-slate-800 shadow-xl space-y-4">
         <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 pb-4 border-b border-slate-800">
           <div className="flex items-center gap-3">
@@ -247,12 +351,20 @@ export default function AttendancePage() {
             </div>
           </div>
 
-          {/* Single Large Total Absent Count Badge */}
-          <div className="flex items-center gap-2 bg-slate-900/80 px-4 py-2 rounded-2xl border border-slate-800">
-            <span className="text-xs text-slate-400 font-medium">Total Absent:</span>
-            <span className={`text-xl font-extrabold ${absentStudents.length > 0 ? 'text-rose-400' : 'text-emerald-400'}`}>
-              {absentStudents.length}
-            </span>
+          {/* Marked count & Total Absent Count Badge */}
+          <div className="flex items-center gap-3">
+            <div className="flex items-center gap-2 bg-slate-900/80 px-4 py-2 rounded-2xl border border-slate-800">
+              <span className="text-xs text-slate-400 font-medium">Marked:</span>
+              <span className={`text-xl font-extrabold ${markedCount === students.length && students.length > 0 ? 'text-emerald-400' : 'text-amber-400'}`}>
+                {markedCount}/{students.length}
+              </span>
+            </div>
+            <div className="flex items-center gap-2 bg-slate-900/80 px-4 py-2 rounded-2xl border border-slate-800">
+              <span className="text-xs text-slate-400 font-medium">Total Absent:</span>
+              <span className={`text-xl font-extrabold ${absentStudents.length > 0 ? 'text-rose-400' : 'text-emerald-400'}`}>
+                {absentStudents.length}
+              </span>
+            </div>
           </div>
         </div>
 
@@ -335,6 +447,7 @@ export default function AttendancePage() {
               <tbody className="divide-y divide-slate-850">
                 {filteredStudents.map((student) => {
                   const currentStatus = attendance[student.id] || 'Unmarked';
+                  const isMarked = currentStatus !== 'Unmarked';
                   return (
                     <tr
                       key={student.id}
@@ -418,6 +531,18 @@ export default function AttendancePage() {
                           >
                             LA
                           </button>
+
+                          {/* PART 1: Per-student Clear button */}
+                          {isMarked && (
+                            <button
+                              onClick={() => handleClearStudent(student.id)}
+                              className="flex items-center gap-1 px-2.5 py-2 border border-slate-600 rounded-xl text-xs font-bold text-slate-400 hover:text-white hover:bg-slate-700 hover:border-slate-500 transition-all cursor-pointer"
+                              title="Clear this student's attendance selection"
+                            >
+                              <XCircle className="w-3.5 h-3.5" />
+                              <span>Clear</span>
+                            </button>
+                          )}
                         </div>
                       </td>
                     </tr>
@@ -429,7 +554,7 @@ export default function AttendancePage() {
         )}
       </div>
 
-      {/* PART 1: STICKY BOTTOM SAVE ATTENDANCE ACTION BAR */}
+      {/* STICKY BOTTOM SAVE ATTENDANCE ACTION BAR */}
       <div className="fixed bottom-0 left-0 right-0 z-40 p-4 bg-slate-950/90 border-t border-slate-800 backdrop-blur-lg">
         <div className="max-w-7xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-4">
           <div className="text-xs text-slate-400 flex items-center gap-2">
@@ -473,7 +598,7 @@ export default function AttendancePage() {
         </div>
       </div>
 
-      {/* CONFIRMATION MODAL */}
+      {/* SAVE / UPDATE CONFIRMATION MODAL */}
       {showConfirmModal && (
         <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
           <div className="bg-slate-900 border border-slate-800 p-6 rounded-2xl max-w-md w-full shadow-2xl space-y-4">
@@ -517,6 +642,156 @@ export default function AttendancePage() {
               >
                 {isSaving && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
                 <span>Confirm {isExisting ? 'Update' : 'Save'}</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* PART 2: RESET ALL UNSAVED CONFIRMATION MODAL */}
+      {showResetModal && (
+        <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-slate-900 border border-slate-800 p-6 rounded-2xl max-w-md w-full shadow-2xl space-y-4">
+            <div className="flex items-center gap-3 text-amber-400">
+              <RotateCcw className="w-6 h-6 shrink-0" />
+              <h3 className="text-base font-bold text-slate-100">
+                Reset Attendance?
+              </h3>
+            </div>
+            <p className="text-xs text-slate-300 leading-relaxed">
+              Clear all currently marked attendance selections?
+            </p>
+            <div className="p-3 bg-slate-950/50 border border-slate-800 rounded-xl text-xs space-y-1.5 text-slate-400">
+              <div className="flex justify-between">
+                <span>Date:</span>
+                <span className="font-mono text-slate-200">{date}</span>
+              </div>
+              <div className="flex justify-between">
+                <span>Currently Marked:</span>
+                <span className="font-semibold text-amber-400">{markedCount} / {students.length}</span>
+              </div>
+              <div className="flex justify-between">
+                <span>After Reset:</span>
+                <span className="font-semibold text-slate-300">0 / {students.length} (Not Marked)</span>
+              </div>
+            </div>
+            <div className="p-3 bg-amber-500/5 border border-amber-500/20 rounded-xl text-xs text-amber-300 flex items-start gap-2">
+              <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
+              <span>This will only clear your current selections. No saved database records will be affected.</span>
+            </div>
+            <div className="flex items-center justify-end gap-3 pt-2">
+              <button
+                onClick={() => setShowResetModal(false)}
+                className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 font-semibold rounded-xl text-xs transition-colors cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleResetAllUnsaved}
+                className="flex items-center gap-2 px-5 py-2 bg-amber-600 hover:bg-amber-500 text-white font-semibold rounded-xl text-xs transition-colors cursor-pointer"
+              >
+                <RotateCcw className="w-3.5 h-3.5" />
+                <span>Reset All to Not Marked</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* PART 3: CLEAR SAVED ATTENDANCE DOUBLE-CONFIRMATION MODAL */}
+      {showClearSavedModal && (
+        <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-slate-900 border border-rose-500/30 p-6 rounded-2xl max-w-lg w-full shadow-2xl space-y-4">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3 text-rose-400">
+                <ShieldAlert className="w-6 h-6 shrink-0" />
+                <h3 className="text-base font-bold text-slate-100">
+                  Clear Saved Attendance
+                </h3>
+              </div>
+              <button
+                onClick={() => {
+                  setShowClearSavedModal(false);
+                  setClearConfirmText('');
+                }}
+                className="p-1 text-slate-400 hover:text-white rounded-lg hover:bg-slate-800 transition-colors cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <p className="text-xs text-slate-300 leading-relaxed">
+              Are you sure you want to clear the saved attendance for this selected session? This action will remove only this date, subject, and period attendance.
+            </p>
+
+            <div className="p-3 bg-slate-950/50 border border-slate-800 rounded-xl text-xs space-y-1.5 text-slate-400">
+              <div className="flex justify-between">
+                <span>Date:</span>
+                <span className="font-mono text-slate-200">{date}</span>
+              </div>
+              <div className="flex justify-between">
+                <span>Subject:</span>
+                <span className="font-semibold text-slate-200">General Daily Attendance</span>
+              </div>
+              <div className="flex justify-between">
+                <span>Period:</span>
+                <span className="font-semibold text-slate-200">Period 1</span>
+              </div>
+              <div className="flex justify-between">
+                <span>Records to be removed:</span>
+                <span className="font-semibold text-rose-400">{savedRecordCount}</span>
+              </div>
+            </div>
+
+            <div className="p-3 bg-rose-500/5 border border-rose-500/20 rounded-xl text-xs text-rose-300 flex items-start gap-2">
+              <ShieldAlert className="w-4 h-4 shrink-0 mt-0.5" />
+              <span>
+                <strong>Warning:</strong> This will permanently delete {savedRecordCount} attendance records from the database for this session.
+                Attendance from other dates will not be affected. Student data, emails, and admin data will remain safe.
+              </span>
+            </div>
+
+            {/* Second confirmation: type CLEAR */}
+            <div className="space-y-2">
+              <label className="block text-xs text-slate-300 font-semibold">
+                To confirm, type <span className="font-mono text-rose-400 bg-rose-500/10 px-1.5 py-0.5 rounded">CLEAR</span> below:
+              </label>
+              <input
+                type="text"
+                value={clearConfirmText}
+                onChange={(e) => setClearConfirmText(e.target.value)}
+                placeholder="Type CLEAR to confirm"
+                className="w-full px-3.5 py-2.5 bg-slate-950/50 border border-slate-700/50 rounded-xl text-slate-200 text-sm focus:outline-none focus:ring-1 focus:ring-rose-500 placeholder-slate-500"
+                autoFocus
+              />
+            </div>
+
+            <div className="flex items-center justify-end gap-3 pt-2">
+              <button
+                onClick={() => {
+                  setShowClearSavedModal(false);
+                  setClearConfirmText('');
+                }}
+                disabled={isClearing}
+                className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 font-semibold rounded-xl text-xs transition-colors cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleClearSavedAttendance}
+                disabled={clearConfirmText !== 'CLEAR' || isClearing}
+                className={`flex items-center gap-2 px-5 py-2 font-semibold rounded-xl text-xs transition-colors cursor-pointer ${
+                  clearConfirmText === 'CLEAR' && !isClearing
+                    ? 'bg-rose-600 hover:bg-rose-500 text-white'
+                    : 'bg-slate-800 text-slate-500 cursor-not-allowed'
+                }`}
+              >
+                {isClearing ? (
+                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                ) : (
+                  <Trash2 className="w-3.5 h-3.5" />
+                )}
+                <span>{isClearing ? 'Clearing...' : 'Clear Saved Attendance'}</span>
               </button>
             </div>
           </div>

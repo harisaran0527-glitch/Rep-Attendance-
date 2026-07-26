@@ -511,6 +511,39 @@ Class Representative`;
   }
 }
 
+export async function clearSavedAttendanceAction(dateString: string) {
+  if (!(await isStaffAuthenticated())) {
+    throw new Error('Unauthorized');
+  }
+
+  try {
+    const targetDate = normalizeDate(new Date(dateString));
+
+    // Count records that will be deleted
+    const count = await prisma.attendance.count({
+      where: { date: targetDate },
+    });
+
+    if (count === 0) {
+      return { success: false, error: 'No saved attendance found for this date.' };
+    }
+
+    // Delete only attendance records for this specific date
+    await prisma.attendance.deleteMany({
+      where: { date: targetDate },
+    });
+
+    revalidatePath('/attendance');
+    revalidatePath('/history');
+    revalidatePath('/dashboard');
+    revalidatePath('/student/dashboard');
+    return { success: true, deletedCount: count };
+  } catch (error) {
+    console.error('Error clearing saved attendance:', error);
+    return { success: false, error: 'Failed to clear saved attendance.' };
+  }
+}
+
 export async function getAttendanceForDateAction(dateString: string) {
   if (!(await isStaffAuthenticated())) {
     throw new Error('Unauthorized');
