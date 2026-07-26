@@ -124,32 +124,40 @@ export async function deleteAllEmailLogs() {
   return prisma.emailLog.deleteMany({});
 }
 
-export async function getWorkingDaysCount(startDateStr: string, endDateStr?: string) {
+export async function getValidWorkingDates(startDateStr: string, endDateStr?: string): Promise<Date[]> {
   const start = normalizeDate(startDateStr);
   const now = normalizeDate(new Date());
   const requestedEnd = endDateStr ? normalizeDate(endDateStr) : now;
-  // Ensure future dates are never counted
   const end = requestedEnd.getTime() > now.getTime() ? now : requestedEnd;
 
   if (start.getTime() > end.getTime()) {
-    return 0;
+    return [];
   }
 
-  // Count ONLY distinct dates for which attendance has actually been marked in DB
-  const distinctMarked = await prisma.attendance.findMany({
+  const totalStudents = await prisma.student.count();
+  const threshold = totalStudents > 0 ? totalStudents : 1; // 100% of active students must be marked for a valid working day
+
+  const dateCounts = await prisma.attendance.groupBy({
+    by: ['date'],
     where: {
       date: {
         gte: start,
         lte: end,
       },
     },
-    select: {
-      date: true,
+    _count: {
+      id: true,
     },
-    distinct: ['date'],
   });
 
-  return distinctMarked.length;
+  return dateCounts
+    .filter((d) => d._count.id >= threshold)
+    .map((d) => d.date);
+}
+
+export async function getWorkingDaysCount(startDateStr: string, endDateStr?: string): Promise<number> {
+  const dates = await getValidWorkingDates(startDateStr, endDateStr);
+  return dates.length;
 }
 
 export async function calculateOverallAttendance(studentId: number, targetDateInput?: Date | string) {
@@ -161,8 +169,9 @@ export async function calculateOverallAttendance(studentId: number, targetDateIn
   const requestedTarget = targetDateInput ? normalizeDate(targetDateInput) : now;
   const targetDate = requestedTarget.getTime() > now.getTime() ? now : requestedTarget;
 
-  // Total distinct marked attendance dates in system from opening date up to target date
-  const totalWorkingDays = await getWorkingDaysCount(openingDateStr, targetDate.toISOString().split('T')[0]);
+  // Get valid working dates
+  const validDates = await getValidWorkingDates(openingDateStr, targetDate.toISOString().split('T')[0]);
+  const validDateTimes = new Set(validDates.map((d) => d.getTime()));
 
   // Query attendance ONLY for this specific student from openingDate up to targetDate
   const attendances = await prisma.attendance.findMany({
@@ -175,27 +184,30 @@ export async function calculateOverallAttendance(studentId: number, targetDateIn
     },
   });
 
+  // Only consider attendance records that fall on a valid working day
+  const validAttendances = attendances.filter((a) => validDateTimes.has(a.date.getTime()));
+
   const attendedStatuses = ['Present', 'On Duty (OD)'];
   
   // Total Days Present for THIS individual student
-  const daysPresent = attendances.filter((a) => attendedStatuses.includes(a.status)).length;
+  const daysPresent = validAttendances.filter((a) => attendedStatuses.includes(a.status)).length;
   
   // Total Days Absent (working days minus present days)
-  const daysAbsent = Math.max(0, totalWorkingDays - daysPresent);
+  const daysAbsent = Math.max(0, validDates.length - daysPresent);
   
   // Rule: Before attendance starts (0 marked dates), display 100%. Once attendance starts (1+ marked dates), calculate real percentage to 2 decimal places.
-  const percentage = totalWorkingDays === 0 
+  const percentage = validDates.length === 0 
     ? 100.0 
-    : Math.round((daysPresent / totalWorkingDays) * 10000) / 100;
+    : Math.round((daysPresent / validDates.length) * 10000) / 100;
 
   return {
     percentage,
     attended: daysPresent,
-    total: totalWorkingDays,
+    total: validDates.length,
     absent: daysAbsent,
     daysPresent,
     daysAbsent,
-    totalDays: totalWorkingDays,
+    totalDays: validDates.length,
     openingDate: openingDateStr,
   };
 }

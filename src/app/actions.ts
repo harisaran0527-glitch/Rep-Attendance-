@@ -16,6 +16,7 @@ import {
   isTeacherAuthenticated,
   isStaffAuthenticated
 } from '@/lib/auth';
+import { isSundayDate, isHoliday } from '@/lib/holidays';
 import { hashPassword, verifyPassword } from '@/lib/crypto';
 import {
   addStudent,
@@ -33,6 +34,7 @@ import {
   deleteAllEmailLogs,
   calculateOverallAttendance,
   getWorkingDaysCount,
+  getValidWorkingDates,
   ATTENDANCE_START_DATE,
   addTeacher,
   getAllTeachers,
@@ -61,28 +63,18 @@ export async function getAllStudentsWithStats() {
     // 2. Fetch baseline opening date from settings
     const settings = await getSmtpSettings();
     const openingDateStr = settings.collegeOpeningDate || '2026-07-13';
-    const openingDate = normalizeDate(openingDateStr);
     const now = normalizeDate(new Date());
 
-    // 3. Bulk fetch distinct marked attendance dates
-    const distinctMarked = await prisma.attendance.findMany({
-      where: {
-        date: {
-          gte: openingDate,
-          lte: now,
-        },
-      },
-      select: { date: true },
-      distinct: ['date'],
-    });
-    const totalWorkingDays = distinctMarked.length;
+    // 3. Get valid working dates (only complete weekday-only sessions)
+    const validDates = await getValidWorkingDates(openingDateStr, now.toISOString().split('T')[0]);
+    const validDateTimes = new Set(validDates.map((d) => d.getTime()));
+    const totalWorkingDays = validDates.length;
 
-    // 4. Bulk fetch ALL attendance records for all students
+    // 4. Bulk fetch attendance records on valid working dates
     const allAttendances = await prisma.attendance.findMany({
       where: {
         date: {
-          gte: openingDate,
-          lte: now,
+          in: validDates,
         },
       },
       select: {
@@ -400,6 +392,13 @@ export async function saveBulkAttendanceAction(
 ) {
   if (!(await isStaffAuthenticated())) {
     throw new Error('Unauthorized');
+  }
+
+  // Server-side day validation — reject saves for Sunday or explicitly configured holidays
+  if (isSundayDate(dateString) || isHoliday(dateString)) {
+    const reason = isSundayDate(dateString) ? 'Sunday' : 'Holiday';
+    console.warn(`[BLOCKED] Attempted to save attendance for ${reason} ${dateString}.`);
+    return { success: false, error: `Cannot save attendance for ${reason} (${dateString}).` };
   }
 
   try {
@@ -1020,6 +1019,11 @@ export async function getStudentHistoryAction() {
     throw new Error('Unauthorized');
   }
 
+  const settings = await getSmtpSettings();
+  const openingDateStr = settings.collegeOpeningDate || '2026-07-13';
+  const validDates = await getValidWorkingDates(openingDateStr);
+  const validDateTimes = new Set(validDates.map((d) => d.getTime()));
+
   const attendances = await prisma.attendance.findMany({
     where: {
       studentId: session.studentId,
@@ -1030,7 +1034,9 @@ export async function getStudentHistoryAction() {
     orderBy: { date: 'desc' },
   });
 
-  return attendances.map((att) => ({
+  const validAttendances = attendances.filter((att) => validDateTimes.has(att.date.getTime()));
+
+  return validAttendances.map((att) => ({
     id: att.id,
     date: att.date.toISOString().split('T')[0],
     status: att.status,
@@ -1047,6 +1053,11 @@ export async function getStudentMonthlyStatsAction() {
     throw new Error('Unauthorized');
   }
 
+  const settings = await getSmtpSettings();
+  const openingDateStr = settings.collegeOpeningDate || '2026-07-13';
+  const validDates = await getValidWorkingDates(openingDateStr);
+  const validDateTimes = new Set(validDates.map((d) => d.getTime()));
+
   const attendances = await prisma.attendance.findMany({
     where: {
       studentId: session.studentId,
@@ -1057,9 +1068,11 @@ export async function getStudentMonthlyStatsAction() {
     orderBy: { date: 'asc' },
   });
 
+  const validAttendances = attendances.filter((att) => validDateTimes.has(att.date.getTime()));
+
   const monthlyData: Record<string, { total: number; attended: number; monthName: string }> = {};
 
-  attendances.forEach((a) => {
+  validAttendances.forEach((a) => {
     const dateObj = new Date(a.date);
     const yearMonth = `${dateObj.getFullYear()}-${String(dateObj.getMonth() + 1).padStart(2, '0')}`;
     const monthName = dateObj.toLocaleString('default', { month: 'short', year: '2-digit' });
@@ -1198,12 +1211,27 @@ export async function getDailyAttendanceSummaryAction(dateString: string) {
     where: { date: targetDate },
   });
 
+  // Build a lookup map: studentId → attendance record
+  const attendanceMap: Record<number, { status: string }> = {};
+  attendances.forEach((a) => {
+    attendanceMap[a.studentId] = { status: a.status };
+  });
+
   const absentStudentsList: any[] = [];
   let presentTodayCount = 0;
 
   students.forEach((student) => {
-    const rec = attendances.find((a) => a.studentId === student.id);
-    if (rec && (rec.status === 'Absent' || rec.status === 'Long Absent')) {
+    const rec = attendanceMap[student.id];
+
+    if (!rec) {
+      // No attendance record for this date — not marked, do NOT count as present
+      return;
+    }
+
+    const status = rec.status;
+
+    if (status === 'Absent' || status === 'Long Absent') {
+      // Explicitly absent
       absentStudentsList.push({
         id: student.id,
         registerNumber: student.registerNumber,
@@ -1212,12 +1240,15 @@ export async function getDailyAttendanceSummaryAction(dateString: string) {
         department: student.department,
         year: student.year,
         section: student.section,
-        status: rec.status,
-        statusSummaryText: rec.status,
+        status,
+        statusSummaryText: status,
       });
-    } else {
+    } else if (status === 'Present' || status === 'On Duty (OD)' || status === 'Medical Leave (ML)') {
+      // Present, OD, and ML all count toward the "present today" count
+      // (they are NOT absent — student was accounted for)
       presentTodayCount++;
     }
+    // Any other unknown status: ignore (do not count either way)
   });
 
   return {

@@ -23,7 +23,11 @@ import {
   Trash2,
   ShieldAlert,
   XCircle,
+  CalendarX,
+  Info,
 } from 'lucide-react';
+
+import { isSundayDate, isSaturdayDate, isHoliday } from '@/lib/holidays';
 
 interface Student {
   id: number;
@@ -66,6 +70,12 @@ export default function AttendancePage() {
   const [clearConfirmText, setClearConfirmText] = useState('');
   const [isClearing, setIsClearing] = useState(false);
   const [savedRecordCount, setSavedRecordCount] = useState(0);
+
+  // Day validation — block saving on Sundays or configured holidays
+  const isSelectedSunday = isSundayDate(date);
+  const isSelectedHoliday = isHoliday(date);
+  const isBlockedDate = isSelectedSunday || isSelectedHoliday;
+  const blockedReason = isSelectedSunday ? 'Sunday' : 'Holiday';
 
   // Load students & existing attendance for selected date
   const loadData = async () => {
@@ -129,15 +139,11 @@ export default function AttendancePage() {
     setSuccessMsg(null);
   };
 
-  // PART 2: Reset all unsaved selections
-  const handleResetAllUnsaved = () => {
-    const newMap: AttendanceMap = {};
-    students.forEach((s) => {
-      newMap[s.id] = 'Unmarked';
-    });
-    setAttendance(newMap);
+  // PART 2: Reset all unsaved selections (reverts to database state)
+  const handleResetAllUnsaved = async () => {
+    await loadData();
     setShowResetModal(false);
-    setSuccessMsg('All attendance selections have been reset to Not Marked.');
+    setSuccessMsg('All attendance selections have been reset to the saved state.');
   };
 
   // PART 3: Clear saved attendance from database
@@ -194,14 +200,35 @@ export default function AttendancePage() {
   // Handle Final Save / Update
   const handleConfirmSave = async () => {
     setShowConfirmModal(false);
+
+    // Hard block: never allow saving attendance on Sundays or holidays
+    if (isBlockedDate) {
+      setErrorMsg(`Cannot save attendance for ${blockedReason} ${date}.`);
+      return;
+    }
+
     setIsSaving(true);
     setSuccessMsg(null);
     setErrorMsg(null);
 
-    const records = students.map((s) => ({
-      studentId: s.id,
-      status: (attendance[s.id] as AttendanceStatus) || 'Present',
-    }));
+    // Build records — only include students with a valid AttendanceStatus (not 'Unmarked')
+    const VALID_STATUSES: AttendanceStatus[] = ['Present', 'Absent', 'On Duty (OD)', 'Medical Leave (ML)', 'Long Absent'];
+    const records = students
+      .filter((s) => {
+        const st = attendance[s.id];
+        return st && VALID_STATUSES.includes(st as AttendanceStatus);
+      })
+      .map((s) => ({
+        studentId: s.id,
+        status: attendance[s.id] as AttendanceStatus,
+      }));
+
+    // Safety guard: if records count doesn't match students count, something is wrong
+    if (records.length !== students.length) {
+      setErrorMsg(`Save aborted: ${students.length - records.length} student(s) have an invalid status. Please ensure all students are marked before saving.`);
+      setIsSaving(false);
+      return;
+    }
 
     try {
       const result = await saveBulkAttendanceAction(date, records);
@@ -282,8 +309,9 @@ export default function AttendancePage() {
             {/* Shortcut: Mark All Present */}
             <button
               onClick={handleMarkAllPresent}
-              disabled={loading || students.length === 0}
-              className="flex items-center justify-center gap-2 px-4 py-2.5 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-300 font-semibold rounded-xl text-xs border border-emerald-500/20 transition-colors cursor-pointer disabled:opacity-50"
+              disabled={loading || students.length === 0 || isBlockedDate}
+              className="flex items-center justify-center gap-2 px-4 py-2.5 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-300 font-semibold rounded-xl text-xs border border-emerald-500/20 transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+              title={isBlockedDate ? `Cannot mark attendance on a ${blockedReason}` : 'Mark all students as Present'}
             >
               <CheckCheck className="w-4 h-4 text-emerald-400" />
               <span>Mark All Present</span>
@@ -331,6 +359,29 @@ export default function AttendancePage() {
         <div className="p-4 rounded-2xl bg-rose-500/10 border border-rose-500/20 text-rose-300 text-xs font-semibold flex items-center gap-2">
           <AlertCircle className="w-4 h-4 text-rose-400 shrink-0" />
           <span>{errorMsg}</span>
+        </div>
+      )}
+
+      {/* SUNDAY / HOLIDAY WARNING BANNER */}
+      {isBlockedDate && (
+        <div className="p-5 rounded-2xl bg-amber-950/40 border border-amber-500/30 backdrop-blur-md flex items-start gap-4 shadow-lg">
+          <div className="p-2.5 rounded-xl bg-amber-500/15 text-amber-400 border border-amber-500/30 shrink-0 mt-0.5">
+            <CalendarX className="w-6 h-6" />
+          </div>
+          <div className="flex-1">
+            <h4 className="text-sm font-bold text-amber-200">
+              {blockedReason === 'Sunday' ? 'Sunday – Attendance Blocked' : 'Holiday – Attendance Blocked'}
+            </h4>
+            <p className="text-xs text-amber-300/80 mt-1 leading-relaxed">
+              <strong>{date}</strong> is a <strong>{blockedReason}</strong>. College is closed / holiday declared.
+              Attendance is only permitted on active working days.
+              All students show as <span className="font-bold text-amber-100">Not Marked</span> for this date.
+            </p>
+            <div className="mt-3 flex items-center gap-2 text-xs text-amber-200/90 font-medium bg-amber-500/10 border border-amber-500/20 w-fit px-3 py-1.5 rounded-xl">
+              <Info className="w-4 h-4 text-amber-400 shrink-0" />
+              <span>Save and Mark All Present buttons are disabled to prevent accidental database inputs.</span>
+            </div>
+          </div>
         </div>
       )}
 
@@ -555,10 +606,15 @@ export default function AttendancePage() {
       </div>
 
       {/* STICKY BOTTOM SAVE ATTENDANCE ACTION BAR */}
-      <div className="fixed bottom-0 left-0 right-0 z-40 p-4 bg-slate-950/90 border-t border-slate-800 backdrop-blur-lg">
+      <div className={`fixed bottom-0 left-0 right-0 z-40 p-4 backdrop-blur-lg border-t ${isBlockedDate ? 'bg-amber-950/80 border-amber-800/50' : 'bg-slate-950/90 border-slate-800'}`}>
         <div className="max-w-7xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-4">
           <div className="text-xs text-slate-400 flex items-center gap-2">
-            {isAllMarked ? (
+            {isBlockedDate ? (
+              <span className="text-amber-400 font-semibold flex items-center gap-1.5">
+                <CalendarX className="w-4 h-4" />
+                <span>{blockedReason} selected — saving attendance is blocked.</span>
+              </span>
+            ) : isAllMarked ? (
               <span className="text-emerald-400 font-semibold flex items-center gap-1.5">
                 <CheckCircle2 className="w-4 h-4" />
                 <span>All {students.length} students marked. Ready to save!</span>
@@ -573,21 +629,26 @@ export default function AttendancePage() {
 
           <button
             onClick={() => setShowConfirmModal(true)}
-            disabled={!isAllMarked || isSaving || loading}
+            disabled={!isAllMarked || isSaving || loading || isBlockedDate}
+            title={isBlockedDate ? `Saving attendance on a ${blockedReason} is not allowed` : undefined}
             className={`w-full sm:w-auto flex items-center justify-center gap-2 px-8 py-3.5 rounded-xl font-bold text-sm transition-all shadow-xl cursor-pointer ${
-              isAllMarked && !isSaving
+              isAllMarked && !isSaving && !isBlockedDate
                 ? 'bg-indigo-600 hover:bg-indigo-500 text-white shadow-indigo-600/30'
                 : 'bg-slate-800 text-slate-500 border border-slate-700/50 cursor-not-allowed'
             }`}
           >
             {isSaving ? (
               <Loader2 className="w-5 h-5 animate-spin" />
+            ) : isBlockedDate ? (
+              <CalendarX className="w-5 h-5" />
             ) : (
               <Save className="w-5 h-5" />
             )}
             <span>
               {isSaving
                 ? 'Saving...'
+                : isBlockedDate
+                ? `${blockedReason} — Saving Blocked`
                 : !isAllMarked
                 ? `Mark All Students to ${isExisting ? 'Update' : 'Save'}`
                 : isExisting
