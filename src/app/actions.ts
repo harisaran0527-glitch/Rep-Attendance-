@@ -615,6 +615,50 @@ export async function getAllAttendanceSessionsAction() {
   }
 }
 
+export async function getSessionStudentDetailsAction(dateString: string) {
+  if (!(await isStaffAuthenticated())) {
+    throw new Error('Unauthorized');
+  }
+
+  try {
+    const targetDate = normalizeDate(new Date(dateString));
+    
+    const allStudents = await prisma.student.findMany({
+      select: {
+        id: true,
+        studentName: true,
+        registerNumber: true,
+      },
+      orderBy: { studentName: 'asc' },
+    });
+
+    const attRecords = await prisma.attendance.findMany({
+      where: { date: targetDate },
+      select: {
+        studentId: true,
+        status: true,
+      },
+    });
+
+    const statusMap: Record<number, string> = {};
+    attRecords.forEach((a) => {
+      statusMap[a.studentId] = a.status;
+    });
+
+    const list = allStudents.map((s) => ({
+      id: s.id,
+      studentName: s.studentName,
+      registerNumber: s.registerNumber,
+      status: statusMap[s.id] || 'Unmarked',
+    }));
+
+    return { success: true, data: list };
+  } catch (error) {
+    console.error('Error fetching session student details:', error);
+    return { success: false, error: 'Failed to load session student details.' };
+  }
+}
+
 export async function getDashboardStatsAction(dateString: string) {
   if (!(await isStaffAuthenticated())) {
     throw new Error('Unauthorized');

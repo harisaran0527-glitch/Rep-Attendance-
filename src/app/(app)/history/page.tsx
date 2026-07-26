@@ -2,11 +2,9 @@
 
 import { useState, useEffect } from 'react';
 import {
-  getAllStudentsWithStats,
-  getAttendanceForDateAction,
   getAllAttendanceSessionsAction,
+  getSessionStudentDetailsAction,
 } from '@/app/actions';
-import { AttendanceStatus } from '@/lib/db-api';
 import {
   Calendar,
   Clock,
@@ -17,21 +15,11 @@ import {
   History,
   Eye,
   Filter,
-  User,
   ShieldCheck,
   Info,
   X,
+  UserCheck,
 } from 'lucide-react';
-
-interface Student {
-  id: number;
-  registerNumber: string;
-  studentName: string;
-  department: string;
-  year: string;
-  section: string;
-  percentage?: number;
-}
 
 interface AttendanceSession {
   id: string;
@@ -48,40 +36,38 @@ interface AttendanceSession {
   savedBy: string;
 }
 
-interface AttendanceMap {
-  [studentId: number]: AttendanceStatus | 'Unmarked';
+interface StudentDetailRecord {
+  id: number;
+  studentName: string;
+  registerNumber: string;
+  status: string;
 }
 
 export default function HistoryPage() {
   const [sessions, setSessions] = useState<AttendanceSession[]>([]);
-  const [students, setStudents] = useState<Student[]>([]);
   const [loading, setLoading] = useState(true);
 
   // Filters & Search
   const [searchQuery, setSearchQuery] = useState('');
-  const [selectedDateFilter, setSelectedDateFilter] = useState('');
-  const [statusFilter, setStatusFilter] = useState<string>('ALL');
+  const [dateFilter, setDateFilter] = useState('');
 
-  // Modal State for "View Details"
+  // Modal State for "View Students"
   const [selectedSession, setSelectedSession] = useState<AttendanceSession | null>(null);
-  const [sessionAttendance, setSessionAttendance] = useState<AttendanceMap>({});
+  const [studentDetails, setStudentDetails] = useState<StudentDetailRecord[]>([]);
   const [loadingDetails, setLoadingDetails] = useState(false);
-  const [detailSearchQuery, setDetailSearchQuery] = useState('');
-  const [detailStatusFilter, setDetailStatusFilter] = useState<string>('ALL');
+  const [modalSearchQuery, setModalSearchQuery] = useState('');
+  const [modalStatusFilter, setModalStatusFilter] = useState<string>('ALL');
 
-  // Load all sessions and base students
+  // Load all sessions directly from Neon PostgreSQL
   const loadSessionsData = async () => {
     setLoading(true);
     try {
-      const studentsData = await getAllStudentsWithStats();
-      setStudents(studentsData);
-
       const res = await getAllAttendanceSessionsAction();
       if (res.success && res.data) {
         setSessions(res.data);
       }
     } catch (error) {
-      console.error('Failed to load attendance history sessions:', error);
+      console.error('Failed to load attendance sessions:', error);
     } finally {
       setLoading(false);
     }
@@ -91,23 +77,19 @@ export default function HistoryPage() {
     loadSessionsData();
   }, []);
 
-  // Open "View Details" Modal
-  const handleOpenDetails = async (sessionItem: AttendanceSession) => {
+  // Open "View Students" Modal
+  const handleOpenStudents = async (sessionItem: AttendanceSession) => {
     setSelectedSession(sessionItem);
     setLoadingDetails(true);
-    setDetailSearchQuery('');
-    setDetailStatusFilter('ALL');
+    setModalSearchQuery('');
+    setModalStatusFilter('ALL');
     try {
-      const attResult = await getAttendanceForDateAction(sessionItem.date);
-      if (attResult.success && attResult.data) {
-        const newMap: AttendanceMap = {};
-        students.forEach((student) => {
-          newMap[student.id] = attResult.data![student.id] || 'Unmarked';
-        });
-        setSessionAttendance(newMap);
+      const res = await getSessionStudentDetailsAction(sessionItem.date);
+      if (res.success && res.data) {
+        setStudentDetails(res.data);
       }
     } catch (err) {
-      console.error('Failed to load session details:', err);
+      console.error('Failed to load session student details:', err);
     } finally {
       setLoadingDetails(false);
     }
@@ -115,7 +97,7 @@ export default function HistoryPage() {
 
   // Filter sessions
   const filteredSessions = sessions.filter((s) => {
-    const matchesDate = !selectedDateFilter || s.date === selectedDateFilter;
+    const matchesDate = !dateFilter || s.date === dateFilter;
     const matchesSearch =
       !searchQuery ||
       s.date.includes(searchQuery) ||
@@ -165,38 +147,37 @@ export default function HistoryPage() {
   };
 
   // Filter student detail modal list
-  const filteredModalStudents = students.filter((student) => {
-    const status = sessionAttendance[student.id] || 'Unmarked';
-    const q = detailSearchQuery.toLowerCase();
+  const filteredStudentDetails = studentDetails.filter((student) => {
+    const q = modalSearchQuery.toLowerCase();
     const matchesQuery =
       student.studentName.toLowerCase().includes(q) ||
       student.registerNumber.toLowerCase().includes(q);
-    const matchesStatus = detailStatusFilter === 'ALL' || status === detailStatusFilter;
+    const matchesStatus = modalStatusFilter === 'ALL' || student.status === modalStatusFilter;
 
     return matchesQuery && matchesStatus;
   });
 
   return (
     <div className="space-y-6 max-w-7xl mx-auto pb-12">
-      {/* Header and Read-Only Guidance Card */}
+      {/* Header and Read-Only Directive Banner */}
       <div className="glass p-6 rounded-2xl flex flex-col lg:flex-row gap-6 justify-between items-start lg:items-center">
         <div className="space-y-1">
-          <h3 className="text-lg font-bold text-slate-100 flex items-center gap-2">
-            <History className="w-5 h-5 text-indigo-400" />
+          <h3 className="text-xl font-bold text-slate-100 flex items-center gap-2">
+            <History className="w-6 h-6 text-indigo-400" />
             <span>Attendance History — View Only</span>
           </h3>
           <p className="text-xs text-slate-400">
-            View saved attendance session records, daily breakdowns, and individual student statuses.
+            Saved attendance sessions stored directly in Neon PostgreSQL.
           </p>
         </div>
 
-        <div className="flex items-center gap-2 bg-indigo-500/10 border border-indigo-500/20 px-4 py-2 rounded-xl text-xs text-indigo-300 font-medium">
+        <div className="flex items-center gap-2 bg-indigo-500/10 border border-indigo-500/20 px-4 py-2.5 rounded-xl text-xs text-indigo-300 font-semibold shadow-inner">
           <Info className="w-4 h-4 text-indigo-400 shrink-0" />
           <span>To make corrections, use the Take Attendance page.</span>
         </div>
       </div>
 
-      {/* Search & Filter Bar */}
+      {/* Filter and Search Bar */}
       <div className="glass p-4 rounded-2xl flex flex-col sm:flex-row gap-4 items-start sm:items-center justify-between">
         <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 w-full sm:w-auto">
           {/* Search Input */}
@@ -206,7 +187,7 @@ export default function HistoryPage() {
             </div>
             <input
               type="text"
-              placeholder="Search history by date or subject..."
+              placeholder="Search history by date..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               className="block w-full pl-9 pr-4 py-2 bg-slate-950/50 border border-slate-700/50 rounded-xl text-slate-100 placeholder-slate-500 focus:outline-none focus:ring-1 focus:ring-indigo-500 text-xs"
@@ -216,14 +197,14 @@ export default function HistoryPage() {
           {/* Date Picker Filter */}
           <input
             type="date"
-            value={selectedDateFilter}
-            onChange={(e) => setSelectedDateFilter(e.target.value)}
+            value={dateFilter}
+            onChange={(e) => setDateFilter(e.target.value)}
             className="px-3.5 py-2 bg-slate-950/50 border border-slate-700/50 rounded-xl text-slate-200 text-xs focus:outline-none focus:ring-1 focus:ring-indigo-500"
           />
 
-          {selectedDateFilter && (
+          {dateFilter && (
             <button
-              onClick={() => setSelectedDateFilter('')}
+              onClick={() => setDateFilter('')}
               className="text-xs text-slate-400 hover:text-white underline cursor-pointer"
             >
               Clear Date Filter
@@ -232,7 +213,7 @@ export default function HistoryPage() {
         </div>
 
         <span className="text-xs text-slate-400 font-medium">
-          Showing {filteredSessions.length} saved attendance sessions
+          Total Sessions Saved: {filteredSessions.length}
         </span>
       </div>
 
@@ -310,14 +291,14 @@ export default function HistoryPage() {
                 </div>
               </div>
 
-              {/* View Details Action */}
+              {/* View Students Action Button */}
               <div className="pt-4 border-t border-slate-800">
                 <button
-                  onClick={() => handleOpenDetails(session)}
-                  className="w-full flex items-center justify-center gap-2 px-4 py-2.5 bg-slate-800 hover:bg-slate-700 text-slate-200 font-semibold rounded-xl text-xs transition-colors cursor-pointer border border-slate-700"
+                  onClick={() => handleOpenStudents(session)}
+                  className="w-full flex items-center justify-center gap-2 px-4 py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white font-bold rounded-xl text-xs transition-colors cursor-pointer shadow-lg shadow-indigo-600/20"
                 >
-                  <Eye className="w-4 h-4 text-indigo-400" />
-                  <span>View Details</span>
+                  <Eye className="w-4 h-4 text-white" />
+                  <span>View Students</span>
                 </button>
               </div>
             </div>
@@ -325,7 +306,7 @@ export default function HistoryPage() {
         </div>
       )}
 
-      {/* STRICT READ-ONLY VIEW DETAILS MODAL */}
+      {/* VIEW STUDENTS MODAL (STRICT READ-ONLY) */}
       {selectedSession && (
         <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
           <div className="bg-slate-900 border border-slate-800 p-6 rounded-2xl max-w-3xl w-full shadow-2xl space-y-5 max-h-[90vh] flex flex-col">
@@ -333,8 +314,8 @@ export default function HistoryPage() {
             <div className="flex items-start justify-between pb-4 border-b border-slate-800 shrink-0">
               <div>
                 <h3 className="text-lg font-bold text-white flex items-center gap-2">
-                  <Calendar className="w-5 h-5 text-indigo-400" />
-                  <span>Attendance Details for {selectedSession.date}</span>
+                  <UserCheck className="w-5 h-5 text-indigo-400" />
+                  <span>Student Attendance List — {selectedSession.date}</span>
                 </h3>
                 <p className="text-xs text-slate-400 mt-1">
                   {selectedSession.subject} &bull; Period {selectedSession.period} &bull; Saved at {selectedSession.savedAt}
@@ -354,20 +335,20 @@ export default function HistoryPage() {
                 <ShieldCheck className="w-4 h-4 text-emerald-400 shrink-0" />
                 <span>Strictly Read-Only View. Saved by {selectedSession.savedBy}.</span>
               </span>
-              <span className="text-[10px] text-slate-500 font-mono">
-                Total: {selectedSession.totalStudents} Students
+              <span className="text-[10px] text-slate-400 font-mono font-bold">
+                Total Students: {selectedSession.totalStudents}
               </span>
             </div>
 
-            {/* Modal Filter Bar */}
+            {/* Modal Search & Filter Bar */}
             <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 justify-between shrink-0">
               <div className="relative flex-1 max-w-sm">
                 <Search className="h-4 w-4 text-slate-500 absolute left-3 top-2.5 pointer-events-none" />
                 <input
                   type="text"
-                  placeholder="Filter student list..."
-                  value={detailSearchQuery}
-                  onChange={(e) => setDetailSearchQuery(e.target.value)}
+                  placeholder="Search student name or register no..."
+                  value={modalSearchQuery}
+                  onChange={(e) => setModalSearchQuery(e.target.value)}
                   className="w-full pl-9 pr-4 py-2 bg-slate-950/50 border border-slate-800 rounded-xl text-slate-200 placeholder-slate-500 text-xs focus:outline-none focus:ring-1 focus:ring-indigo-500"
                 />
               </div>
@@ -377,9 +358,9 @@ export default function HistoryPage() {
                 {['ALL', 'Present', 'Absent', 'On Duty (OD)', 'Medical Leave (ML)', 'Long Absent'].map((st) => (
                   <button
                     key={st}
-                    onClick={() => setDetailStatusFilter(st)}
+                    onClick={() => setModalStatusFilter(st)}
                     className={`px-2.5 py-1 rounded-lg text-[10px] font-bold transition-all whitespace-nowrap cursor-pointer ${
-                      detailStatusFilter === st
+                      modalStatusFilter === st
                         ? 'bg-indigo-600 text-white'
                         : 'bg-slate-800 text-slate-400 hover:text-slate-200'
                     }`}
@@ -390,42 +371,39 @@ export default function HistoryPage() {
               </div>
             </div>
 
-            {/* Read-Only Student Status List Table */}
+            {/* Read-Only Student Status Table */}
             <div className="flex-1 overflow-y-auto custom-scrollbar border border-slate-800 rounded-xl">
               {loadingDetails ? (
                 <div className="flex items-center justify-center py-16">
                   <Loader2 className="w-8 h-8 text-indigo-500 animate-spin" />
                 </div>
-              ) : filteredModalStudents.length === 0 ? (
+              ) : filteredStudentDetails.length === 0 ? (
                 <div className="py-16 text-center text-slate-500 text-xs">
                   No student records match selected filter.
                 </div>
               ) : (
                 <table className="w-full text-left border-collapse text-xs">
                   <thead>
-                    <tr className="bg-slate-950/60 border-b border-slate-800 text-[10px] font-bold uppercase tracking-wider text-slate-400 sticky top-0 backdrop-blur-md">
+                    <tr className="bg-slate-950/80 border-b border-slate-800 text-[10px] font-bold uppercase tracking-wider text-slate-400 sticky top-0 backdrop-blur-md">
                       <th className="px-6 py-3">Student Name</th>
-                      <th className="px-6 py-3">Register Number</th>
-                      <th className="px-6 py-3 text-right">Saved Attendance Status</th>
+                      <th className="px-6 py-3">Register No</th>
+                      <th className="px-6 py-3 text-right">Status</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-850">
-                    {filteredModalStudents.map((student) => {
-                      const status = sessionAttendance[student.id] || 'Unmarked';
-                      return (
-                        <tr key={student.id} className="hover:bg-slate-800/10">
-                          <td className="px-6 py-3 font-semibold text-slate-100">
-                            {student.studentName}
-                          </td>
-                          <td className="px-6 py-3 font-mono text-slate-400">
-                            {student.registerNumber}
-                          </td>
-                          <td className="px-6 py-3 text-right">
-                            {getStatusBadge(status)}
-                          </td>
-                        </tr>
-                      );
-                    })}
+                    {filteredStudentDetails.map((student) => (
+                      <tr key={student.id} className="hover:bg-slate-800/10">
+                        <td className="px-6 py-3 font-bold text-slate-100">
+                          {student.studentName}
+                        </td>
+                        <td className="px-6 py-3 font-mono text-slate-400 font-semibold">
+                          {student.registerNumber}
+                        </td>
+                        <td className="px-6 py-3 text-right">
+                          {getStatusBadge(student.status)}
+                        </td>
+                      </tr>
+                    ))}
                   </tbody>
                 </table>
               )}
@@ -433,14 +411,14 @@ export default function HistoryPage() {
 
             {/* Modal Footer */}
             <div className="pt-3 border-t border-slate-800 flex items-center justify-between shrink-0 text-xs">
-              <span className="text-slate-500 font-medium">
-                Showing {filteredModalStudents.length} of {students.length} students
+              <span className="text-slate-400 font-medium">
+                Displaying {filteredStudentDetails.length} of {studentDetails.length} students
               </span>
               <button
                 onClick={() => setSelectedSession(null)}
-                className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 font-semibold rounded-xl transition-colors cursor-pointer"
+                className="px-5 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 font-bold rounded-xl transition-colors cursor-pointer"
               >
-                Close Details
+                Close View
               </button>
             </div>
           </div>
