@@ -102,7 +102,7 @@ export async function getAllStudentsWithStats() {
     });
 
     // Map all 58 students (including students with 0 attendance records)
-    return students.map((student) => {
+    const results = students.map((student) => {
       const attended = presentCountMap[student.id] || 0;
       const percentage = totalWorkingDays > 0 
         ? Math.round((attended / totalWorkingDays) * 1000) / 10 
@@ -117,6 +117,13 @@ export async function getAllStudentsWithStats() {
         daysAbsent: Math.max(0, totalWorkingDays - attended),
       };
     });
+
+    const sample = results.find(s => s.studentName === 'RANJITH V') || results[0];
+    if (sample) {
+      console.log(`[SERVER DEBUG] Student Name: "${sample.studentName}" | Present Days: ${sample.attended} | Total Distinct Marked Dates: ${sample.totalClasses} | Final Calculated Percentage: ${sample.percentage}% | Value Sent to UI: ${sample.percentage}%`);
+    }
+
+    return results;
   } catch (error) {
     console.error('Error calculating bulk stats, falling back to base student list:', error);
     // Fallback: Return all 58 students so student list NEVER breaks
