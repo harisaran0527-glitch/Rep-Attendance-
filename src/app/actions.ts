@@ -417,12 +417,12 @@ export async function saveBulkAttendanceAction(
       )
     );
 
-    // Auto warning email alerts trigger block (Only active when totalWorkingDays >= 2)
+    // Auto warning email alerts trigger block (Active when totalWorkingDays >= 1)
     const settings = await getSmtpSettings();
     const openingDateStr = settings.collegeOpeningDate || '2026-07-13';
     const totalWorkingDays = await getWorkingDaysCount(openingDateStr, dateString);
 
-    if (totalWorkingDays >= 2) {
+    if (totalWorkingDays >= 1) {
       const affectedStudentIds = Array.from(new Set(records.map((r) => r.studentId)));
       const markedDateNorm = normalizeDate(new Date(dateString));
 
