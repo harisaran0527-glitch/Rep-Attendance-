@@ -29,7 +29,10 @@ import {
   updateSmtpSettings,
   getEmailLogs,
   logSentEmail,
+  deleteEmailLog,
+  deleteAllEmailLogs,
   calculateOverallAttendance,
+  getWorkingDaysCount,
   ATTENDANCE_START_DATE,
   addTeacher,
   getAllTeachers,
@@ -333,6 +336,32 @@ export async function getEmailLogsAction() {
   return getEmailLogs();
 }
 
+export async function deleteEmailLogAction(id: number) {
+  if (!(await isAdminAuthenticated())) {
+    throw new Error('Unauthorized');
+  }
+  try {
+    await deleteEmailLog(id);
+    revalidatePath('/emaillogs');
+    return { success: true };
+  } catch (error) {
+    return { success: false, error: 'Failed to delete email log.' };
+  }
+}
+
+export async function deleteAllEmailLogsAction() {
+  if (!(await isAdminAuthenticated())) {
+    throw new Error('Unauthorized');
+  }
+  try {
+    await deleteAllEmailLogs();
+    revalidatePath('/emaillogs');
+    return { success: true };
+  } catch (error) {
+    return { success: false, error: 'Failed to delete all email logs.' };
+  }
+}
+
 export async function sendTestEmailAction(testEmail: string) {
   if (!(await isAdminAuthenticated())) {
     throw new Error('Unauthorized');
@@ -388,51 +417,73 @@ export async function saveBulkAttendanceAction(
       )
     );
 
-    // Auto warning email alerts trigger block
-    const affectedStudentIds = Array.from(new Set(records.map((r) => r.studentId)));
+    // Auto warning email alerts trigger block (Only active when totalWorkingDays >= 2)
     const settings = await getSmtpSettings();
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
+    const openingDateStr = settings.collegeOpeningDate || '2026-07-13';
+    const totalWorkingDays = await getWorkingDaysCount(openingDateStr, dateString);
 
-    for (const studentId of affectedStudentIds) {
-      const { percentage, attended, total } = await calculateOverallAttendance(studentId);
-      if (percentage < settings.lowThreshold) {
-        // Avoid sending multiple alerts in the same day
-        const warnedToday = await prisma.emailLog.findFirst({
-          where: {
-            studentId,
-            sentAt: {
-              gte: today,
-            },
-          },
-        });
+    if (totalWorkingDays >= 2) {
+      const affectedStudentIds = Array.from(new Set(records.map((r) => r.studentId)));
+      const markedDateNorm = normalizeDate(new Date(dateString));
 
-        if (!warnedToday) {
-          const student = await prisma.student.findUnique({
-            where: { id: studentId },
-          });
-
-          if (student && student.email) {
-            const emailResult = await sendLowAttendanceEmail(
-              student.studentName,
-              student.email,
-              percentage,
-              settings.lowThreshold,
-              settings,
-              attended,
-              total
-            );
-
-            const daysNeeded = Math.max(0, Math.ceil(3 * total - 4 * attended));
-            await logSentEmail({
-              studentId,
-              email: student.email,
-              percentage,
-              subject: `Urgent: Low Attendance Warning (${percentage}%)`,
-              body: `Dear ${student.studentName}, your overall attendance of ${percentage}% (${attended}/${total} days) has fallen below the required threshold of ${settings.lowThreshold}%. Warning: You must attend the next ${daysNeeded} days consecutively to reach 75%.`,
-              status: emailResult.status,
+      for (const studentId of affectedStudentIds) {
+        try {
+          const { percentage, attended, total } = await calculateOverallAttendance(studentId, dateString);
+          if (percentage < settings.lowThreshold) {
+            // Check if warning was already sent for this student for this marked attendance date
+            const warnedForDate = await prisma.emailLog.findFirst({
+              where: {
+                studentId,
+                sentAt: {
+                  gte: markedDateNorm,
+                },
+              },
             });
+
+            if (!warnedForDate) {
+              const student = await prisma.student.findUnique({
+                where: { id: studentId },
+              });
+
+              if (student && student.email) {
+                const emailResult = await sendLowAttendanceEmail(
+                  student.studentName,
+                  student.email,
+                  percentage,
+                  settings.lowThreshold,
+                  settings,
+                  attended,
+                  total,
+                  student.registerNumber
+                );
+
+                const subjectText = `Attendance Warning – Below 75%`;
+                const bodyText = `Dear ${student.studentName},
+
+Your current attendance percentage is ${percentage}%, which is below the required 75%.
+
+Please improve your attendance and contact your class representative if you need clarification.
+
+Student Register Number: ${student.registerNumber}
+Current Attendance: ${percentage}%
+
+Regards,
+Class Representative`;
+
+                await logSentEmail({
+                  studentId,
+                  email: student.email,
+                  percentage,
+                  subject: subjectText,
+                  body: bodyText,
+                  status: emailResult.status === 'Sent' ? 'Sent' : emailResult.status === 'Simulated' ? 'Simulated' : 'Failed',
+                });
+              }
+            }
           }
+        } catch (emailErr) {
+          console.error(`Email notification warning failed for student ${studentId}:`, emailErr);
+          // Never break attendance saving even if email sending encounters an error!
         }
       }
     }

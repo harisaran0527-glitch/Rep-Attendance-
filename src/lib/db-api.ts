@@ -115,6 +115,16 @@ export async function logSentEmail(data: {
   });
 }
 
+export async function deleteEmailLog(id: number) {
+  return prisma.emailLog.delete({
+    where: { id },
+  });
+}
+
+export async function deleteAllEmailLogs() {
+  return prisma.emailLog.deleteMany({});
+}
+
 export async function getWorkingDaysCount(startDateStr: string, endDateStr?: string) {
   const start = normalizeDate(startDateStr);
   const now = normalizeDate(new Date());
@@ -174,8 +184,10 @@ export async function calculateOverallAttendance(studentId: number, targetDateIn
   // Total Days Absent (working days minus present days)
   const daysAbsent = Math.max(0, totalWorkingDays - daysPresent);
   
-  // Formula: (Student's Total Present Days / Total Marked Working Days) * 100
-  const percentage = totalWorkingDays > 0 ? Math.round((daysPresent / totalWorkingDays) * 1000) / 10 : 100.0;
+  // Rule: If 0 or 1 marked attendance date, display 100%. From 2 marked dates onward, calculate real percentage.
+  const percentage = totalWorkingDays <= 1 
+    ? 100.0 
+    : Math.round((daysPresent / totalWorkingDays) * 1000) / 10;
 
   return {
     percentage,
