@@ -44,28 +44,21 @@ function main() {
         return __generator(this, function (_a) {
             switch (_a.label) {
                 case 0:
-                    adminEmail = 'admin@gmail.com';
-                    adminPassword = 'admin123';
-                    return [4 /*yield*/, prisma.admin.findUnique({
-                            where: { email: adminEmail }
-                        })];
+                    adminEmail = 'classrep@gmail.com';
+                    adminPassword = 'saran@2007';
+                    return [4 /*yield*/, prisma.admin.deleteMany()];
                 case 1:
-                    existingAdmin = _a.sent();
-                    if (!!existingAdmin) return [3 /*break*/, 3];
+                    _a.sent();
                     return [4 /*yield*/, prisma.admin.create({
                             data: {
                                 email: adminEmail,
-                                password: adminPassword, // In a real app, hash this. Kept plain for simplicity per requirements.
+                                password: adminPassword,
                             }
                         })];
                 case 2:
                     _a.sent();
                     console.log('Admin account created successfully.');
-                    return [3 /*break*/, 4];
-                case 3:
-                    console.log('Admin account already exists.');
-                    _a.label = 4;
-                case 4: return [2 /*return*/];
+                    return [2 /*return*/];
             }
         });
     });

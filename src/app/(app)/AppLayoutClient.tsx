@@ -1,9 +1,9 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
-import { logoutAction } from '@/app/actions';
+import { logoutAction, teacherLogoutAction, checkUserRoleAction } from '@/app/actions';
 import {
   LayoutDashboard,
   Users,
@@ -27,14 +27,39 @@ export default function AppLayoutClient({ children }: AppLayoutClientProps) {
   const router = useRouter();
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
 
+  const [isAdmin, setIsAdmin] = useState(false);
+  const [isTeacher, setIsTeacher] = useState(false);
+  const [userEmail, setUserEmail] = useState('');
+
+  useEffect(() => {
+    async function fetchUserRole() {
+      try {
+        const res = await checkUserRoleAction();
+        setIsAdmin(res.isAdmin);
+        setIsTeacher(res.isTeacher);
+        if (res.isAdmin) {
+          setUserEmail('classrep@gmail.com');
+        } else {
+          // If teacher, fetch cookies/sessions or default text
+          setUserEmail('teacher@college.edu');
+        }
+      } catch (err) {
+        console.error(err);
+      }
+    }
+    fetchUserRole();
+  }, []);
+
   const navigation = [
     { name: 'Dashboard', href: '/', icon: LayoutDashboard },
     { name: 'Students', href: '/students', icon: Users },
     { name: 'Take Attendance', href: '/attendance', icon: CalendarCheck },
     { name: 'Attendance History', href: '/history', icon: History },
     { name: 'Reports', href: '/reports', icon: FileBarChart },
-    { name: 'Email Logs', href: '/emaillogs', icon: Mail },
-    { name: 'Settings', href: '/settings', icon: SettingsIcon },
+    ...(isAdmin ? [
+      { name: 'Email Logs', href: '/emaillogs', icon: Mail },
+      { name: 'Settings', href: '/settings', icon: SettingsIcon }
+    ] : []),
   ];
 
   const getPageTitle = () => {
@@ -46,15 +71,18 @@ export default function AppLayoutClient({ children }: AppLayoutClientProps) {
   };
 
   async function handleLogout() {
-    const result = await logoutAction();
-    if (result.success) {
+    if (isTeacher) {
+      await teacherLogoutAction();
+      router.push('/teacher/login');
+    } else {
+      await logoutAction();
       router.push('/login');
-      router.refresh();
     }
+    router.refresh();
   }
 
   const SidebarContent = () => (
-    <div className="flex flex-col h-full bg-slate-900/90 border-r border-slate-800 text-slate-100">
+    <div className="flex flex-col h-full bg-slate-900/90 border-r border-slate-800 text-slate-100 font-sans">
       {/* Brand Header */}
       <div className="flex items-center gap-3 px-6 py-5 border-b border-slate-800">
         <div className="flex items-center justify-center w-10 h-10 rounded-xl bg-indigo-600/20 border border-indigo-500/30 text-indigo-400">
@@ -97,7 +125,7 @@ export default function AppLayoutClient({ children }: AppLayoutClientProps) {
           </div>
           <div className="truncate">
             <p className="text-xs text-slate-500 font-medium">Logged in as</p>
-            <p className="text-sm font-semibold text-slate-200 truncate">admin@gmail.com</p>
+            <p className="text-sm font-semibold text-slate-200 truncate">{userEmail}</p>
           </div>
         </div>
         <button
@@ -158,7 +186,7 @@ export default function AppLayoutClient({ children }: AppLayoutClientProps) {
 
           <div className="flex items-center gap-3">
             <span className="hidden sm:inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold bg-indigo-500/10 text-indigo-400 border border-indigo-500/20">
-              Admin Portal
+              {isAdmin ? 'Admin Portal' : 'Teacher Portal'}
             </span>
           </div>
         </header>

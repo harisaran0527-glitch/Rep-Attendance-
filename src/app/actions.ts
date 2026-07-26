@@ -2,7 +2,21 @@
 
 import { revalidatePath } from 'next/cache';
 import { prisma } from '@/lib/db';
-import { setAdminSession, clearAdminSession, isAdminAuthenticated } from '@/lib/auth';
+import { 
+  setAdminSession, 
+  clearAdminSession, 
+  isAdminAuthenticated,
+  setStudentSession,
+  clearStudentSession,
+  getStudentSession,
+  isStudentAuthenticated,
+  setTeacherSession,
+  clearTeacherSession,
+  getTeacherSession,
+  isTeacherAuthenticated,
+  isStaffAuthenticated
+} from '@/lib/auth';
+import { hashPassword, verifyPassword } from '@/lib/crypto';
 import {
   addStudent,
   editStudent,
@@ -16,11 +30,16 @@ import {
   getEmailLogs,
   logSentEmail,
   calculateOverallAttendance,
+  ATTENDANCE_START_DATE,
+  addTeacher,
+  getAllTeachers,
+  deleteTeacher,
+  findTeacherByEmail
 } from '@/lib/db-api';
 import { sendLowAttendanceEmail } from '@/lib/email';
 
 export async function getAllStudents() {
-  if (!(await isAdminAuthenticated())) {
+  if (!(await isStaffAuthenticated())) {
     throw new Error('Unauthorized');
   }
   return dbGetAllStudents();
@@ -28,7 +47,7 @@ export async function getAllStudents() {
 
 // Action to get students with their percentages
 export async function getAllStudentsWithStats() {
-  if (!(await isAdminAuthenticated())) {
+  if (!(await isStaffAuthenticated())) {
     throw new Error('Unauthorized');
   }
   const students = await dbGetAllStudents();
@@ -83,6 +102,7 @@ export async function addStudentAction(data: {
   registerNumber: string;
   studentName: string;
   email: string;
+  password?: string;
   department: string;
   year: string;
   section: string;
@@ -91,14 +111,28 @@ export async function addStudentAction(data: {
     throw new Error('Unauthorized');
   }
 
+  if (!data.email || !data.email.trim()) {
+    return { success: false, error: 'Student Email is required.' };
+  }
+
+  if (!data.password || !data.password.trim()) {
+    return { success: false, error: 'Student Password is required.' };
+  }
+
   try {
-    await addStudent(data);
+    const rawPassword = data.password.trim();
+    const hashedPassword = hashPassword(rawPassword);
+    await addStudent({ 
+      ...data, 
+      email: data.email.trim().toLowerCase(),
+      password: hashedPassword 
+    });
     revalidatePath('/students');
     revalidatePath('/dashboard');
     return { success: true };
   } catch (error: any) {
     if (error.code === 'P2002') {
-      return { success: false, error: 'Register Number or Email already exists.' };
+      return { success: false, error: 'Roll Number or Email already exists.' };
     }
     return { success: false, error: 'Failed to add student.' };
   }
@@ -108,6 +142,7 @@ export async function addBulkStudentsAction(studentsList: {
   registerNumber: string;
   studentName: string;
   email: string;
+  password?: string;
   department: string;
   year: string;
   section: string;
@@ -121,7 +156,16 @@ export async function addBulkStudentsAction(studentsList: {
 
     for (const studentData of studentsList) {
       try {
-        await addStudent(studentData);
+        if (!studentData.email || !studentData.password) {
+          failedList.push(`${studentData.registerNumber} (Missing Email or Password)`);
+          continue;
+        }
+        const hashedPassword = hashPassword(studentData.password.trim());
+        await addStudent({ 
+          ...studentData, 
+          email: studentData.email.trim().toLowerCase(),
+          password: hashedPassword 
+        });
         addedCount++;
       } catch (error: any) {
         console.error('Failed to seed bulk student:', studentData.registerNumber, error);
@@ -142,6 +186,7 @@ export async function editStudentAction(
     registerNumber: string;
     studentName: string;
     email: string;
+    password?: string;
     department: string;
     year: string;
     section: string;
@@ -152,13 +197,19 @@ export async function editStudentAction(
   }
 
   try {
-    await editStudent(id, data);
+    const updatePayload: any = { ...data };
+    if (data.password && data.password.trim() !== '') {
+      updatePayload.password = hashPassword(data.password.trim());
+    } else {
+      delete updatePayload.password;
+    }
+    await editStudent(id, updatePayload);
     revalidatePath('/students');
     revalidatePath('/dashboard');
     return { success: true };
   } catch (error: any) {
     if (error.code === 'P2002') {
-      return { success: false, error: 'Register Number or Email already exists.' };
+      return { success: false, error: 'Roll Number or Email already exists.' };
     }
     return { success: false, error: 'Failed to edit student.' };
   }
@@ -229,7 +280,9 @@ export async function sendTestEmailAction(testEmail: string) {
       testEmail,
       72.5,
       settings.lowThreshold,
-      settings
+      settings,
+      70,
+      100
     );
     return result;
   } catch (err: any) {
@@ -243,10 +296,9 @@ export async function sendTestEmailAction(testEmail: string) {
 
 export async function saveBulkAttendanceAction(
   dateString: string,
-  period: number,
   records: { studentId: number; status: AttendanceStatus }[]
 ) {
-  if (!(await isAdminAuthenticated())) {
+  if (!(await isStaffAuthenticated())) {
     throw new Error('Unauthorized');
   }
 
@@ -256,17 +308,16 @@ export async function saveBulkAttendanceAction(
       records.map((r) =>
         prisma.attendance.upsert({
           where: {
-            studentId_date_period: {
+            studentId_date: {
               studentId: r.studentId,
               date: normalizeDate(targetDate),
-              period,
             },
           },
-          update: { status: r.status },
+          update: { status: r.status, period: 1 },
           create: {
             studentId: r.studentId,
             date: normalizeDate(targetDate),
-            period,
+            period: 1,
             status: r.status,
           },
         })
@@ -280,7 +331,7 @@ export async function saveBulkAttendanceAction(
     today.setHours(0, 0, 0, 0);
 
     for (const studentId of affectedStudentIds) {
-      const { percentage } = await calculateOverallAttendance(studentId);
+      const { percentage, attended, total } = await calculateOverallAttendance(studentId);
       if (percentage < settings.lowThreshold) {
         // Avoid sending multiple alerts in the same day
         const warnedToday = await prisma.emailLog.findFirst({
@@ -303,15 +354,18 @@ export async function saveBulkAttendanceAction(
               student.email,
               percentage,
               settings.lowThreshold,
-              settings
+              settings,
+              attended,
+              total
             );
 
+            const daysNeeded = Math.max(0, Math.ceil(3 * total - 4 * attended));
             await logSentEmail({
               studentId,
               email: student.email,
               percentage,
               subject: `Urgent: Low Attendance Warning (${percentage}%)`,
-              body: `Dear ${student.studentName}, your overall attendance of ${percentage}% has fallen below the required threshold of ${settings.lowThreshold}%.`,
+              body: `Dear ${student.studentName}, your overall attendance of ${percentage}% (${attended}/${total} days) has fallen below the required threshold of ${settings.lowThreshold}%. Warning: You must attend the next ${daysNeeded} days consecutively to reach 75%.`,
               status: emailResult.status,
             });
           }
@@ -329,8 +383,8 @@ export async function saveBulkAttendanceAction(
   }
 }
 
-export async function getAttendanceForDateAndPeriodAction(dateString: string, period: number) {
-  if (!(await isAdminAuthenticated())) {
+export async function getAttendanceForDateAction(dateString: string) {
+  if (!(await isStaffAuthenticated())) {
     throw new Error('Unauthorized');
   }
 
@@ -339,7 +393,6 @@ export async function getAttendanceForDateAndPeriodAction(dateString: string, pe
     const records = await prisma.attendance.findMany({
       where: {
         date: targetDate,
-        period,
       },
       select: {
         studentId: true,
@@ -360,12 +413,8 @@ export async function getAttendanceForDateAndPeriodAction(dateString: string, pe
   }
 }
 
-// ==========================================
-// DASHBOARD & STATS ACTIONS
-// ==========================================
-
-export async function getDashboardStatsAction(dateString: string, period: number) {
-  if (!(await isAdminAuthenticated())) {
+export async function getDashboardStatsAction(dateString: string) {
+  if (!(await isStaffAuthenticated())) {
     throw new Error('Unauthorized');
   }
 
@@ -376,7 +425,6 @@ export async function getDashboardStatsAction(dateString: string, period: number
   const attendances = await prisma.attendance.findMany({
     where: {
       date: targetDate,
-      period,
     },
   });
 
@@ -395,11 +443,6 @@ export async function getDashboardStatsAction(dateString: string, period: number
     }
   });
 
-  // Calculate overall day present (students marked present in at least one period today)
-  // This is a nice-to-have, but let's stick exactly to the dashboard requirements:
-  // "Present Count, Absent Count, ELITE Count, On Duty Count, Medical Leave Count, Long Leave Count"
-  // referring to the selected date and period.
-
   return {
     totalStudents,
     present: counts['Present'],
@@ -416,7 +459,7 @@ export async function getDashboardStatsAction(dateString: string, period: number
 // ==========================================
 
 export async function getDailyReportAction(dateString: string) {
-  if (!(await isAdminAuthenticated())) {
+  if (!(await isStaffAuthenticated())) {
     throw new Error('Unauthorized');
   }
 
@@ -455,11 +498,12 @@ export async function getDailyReportAction(dateString: string) {
 }
 
 export async function getSubjectWiseReportAction(startDateStr: string, endDateStr: string, period: number) {
-  if (!(await isAdminAuthenticated())) {
+  if (!(await isStaffAuthenticated())) {
     throw new Error('Unauthorized');
   }
 
-  const start = normalizeDate(new Date(startDateStr));
+  const reqStart = normalizeDate(new Date(startDateStr));
+  const start = reqStart < ATTENDANCE_START_DATE ? ATTENDANCE_START_DATE : reqStart;
   const end = normalizeDate(new Date(endDateStr));
 
   const students = await prisma.student.findMany({
@@ -521,11 +565,12 @@ export async function getSubjectWiseReportAction(startDateStr: string, endDateSt
 }
 
 export async function getStudentWiseReportAction(studentId: number, startDateStr: string, endDateStr: string) {
-  if (!(await isAdminAuthenticated())) {
+  if (!(await isStaffAuthenticated())) {
     throw new Error('Unauthorized');
   }
 
-  const start = normalizeDate(new Date(startDateStr));
+  const reqStart = normalizeDate(new Date(startDateStr));
+  const start = reqStart < ATTENDANCE_START_DATE ? ATTENDANCE_START_DATE : reqStart;
   const end = normalizeDate(new Date(endDateStr));
 
   const student = await prisma.student.findUnique({
@@ -572,7 +617,7 @@ export async function getStudentWiseReportAction(studentId: number, startDateStr
 }
 
 export async function getRecentActivityAction() {
-  if (!(await isAdminAuthenticated())) {
+  if (!(await isStaffAuthenticated())) {
     throw new Error('Unauthorized');
   }
 
@@ -595,5 +640,316 @@ export async function getRecentActivityAction() {
     date: act.date.toISOString().split('T')[0],
     updatedAt: act.updatedAt,
   }));
+}
+
+// ==========================================
+// STUDENT PORTAL ACTIONS
+// ==========================================
+
+export async function studentLoginAction(formData: FormData) {
+  const email = formData.get('email') as string;
+  const password = formData.get('password') as string;
+
+  if (!email || !password) {
+    return { success: false, error: 'Email and password are required.' };
+  }
+
+  const student = await prisma.student.findUnique({
+    where: { email: email.trim().toLowerCase() },
+  });
+
+  if (!student) {
+    return { success: false, error: 'Invalid email or password.' };
+  }
+
+  const isMatch = verifyPassword(password, student.password);
+  if (!isMatch) {
+    return { success: false, error: 'Invalid email or password.' };
+  }
+
+  await setStudentSession(student.email, student.id);
+  return { success: true };
+}
+
+export async function studentLogoutAction() {
+  await clearStudentSession();
+  return { success: true };
+}
+
+export async function studentGoogleLoginAction(googleEmail: string) {
+  if (!googleEmail || !googleEmail.trim()) {
+    return { success: false, error: 'Google Email address is required.' };
+  }
+
+  const cleanEmail = googleEmail.trim().toLowerCase();
+
+  const student = await prisma.student.findUnique({
+    where: { email: cleanEmail },
+  });
+
+  if (!student) {
+    return {
+      success: false,
+      error: `Access Denied: The Google account "${cleanEmail}" is not registered in the student system. Only registered students are allowed to log in. Please contact your Administrator.`,
+    };
+  }
+
+  await setStudentSession(student.email, student.id);
+  return { success: true };
+}
+
+export async function getStudentProfileStatsAction() {
+  const session = await getStudentSession();
+  if (!session) {
+    throw new Error('Unauthorized');
+  }
+
+  const student = await prisma.student.findUnique({
+    where: { id: session.studentId },
+  });
+
+  if (!student) {
+    throw new Error('Student not found');
+  }
+
+  const stats = await calculateOverallAttendance(student.id);
+
+  return {
+    success: true,
+    student: {
+      id: student.id,
+      studentName: student.studentName,
+      registerNumber: student.registerNumber,
+      email: student.email,
+      department: student.department,
+      year: student.year,
+      section: student.section,
+    },
+    stats: {
+      percentage: stats.percentage,
+      attended: stats.attended,
+      totalClasses: stats.total,
+      absent: stats.absent,
+      daysPresent: stats.daysPresent,
+      daysAbsent: stats.daysAbsent,
+      totalDays: stats.totalDays,
+    },
+  };
+}
+
+export async function getStudentHistoryAction() {
+  const session = await getStudentSession();
+  if (!session) {
+    throw new Error('Unauthorized');
+  }
+
+  const attendances = await prisma.attendance.findMany({
+    where: {
+      studentId: session.studentId,
+      date: {
+        gte: ATTENDANCE_START_DATE,
+      },
+    },
+    orderBy: { date: 'desc' },
+  });
+
+  return attendances.map((att) => ({
+    id: att.id,
+    date: att.date.toISOString().split('T')[0],
+    status: att.status,
+  }));
+}
+
+export async function getStudentSubjectStatsAction() {
+  return [];
+}
+
+export async function getStudentMonthlyStatsAction() {
+  const session = await getStudentSession();
+  if (!session) {
+    throw new Error('Unauthorized');
+  }
+
+  const attendances = await prisma.attendance.findMany({
+    where: {
+      studentId: session.studentId,
+      date: {
+        gte: ATTENDANCE_START_DATE,
+      },
+    },
+    orderBy: { date: 'asc' },
+  });
+
+  const monthlyData: Record<string, { total: number; attended: number; monthName: string }> = {};
+
+  attendances.forEach((a) => {
+    const dateObj = new Date(a.date);
+    const yearMonth = `${dateObj.getFullYear()}-${String(dateObj.getMonth() + 1).padStart(2, '0')}`;
+    const monthName = dateObj.toLocaleString('default', { month: 'short', year: '2-digit' });
+
+    if (!monthlyData[yearMonth]) {
+      monthlyData[yearMonth] = { total: 0, attended: 0, monthName };
+    }
+
+    monthlyData[yearMonth].total++;
+    const attendedStatuses = ['Present', 'Late', 'On Duty (OD)', 'Medical Leave (ML)'];
+    if (attendedStatuses.includes(a.status)) {
+      monthlyData[yearMonth].attended++;
+    }
+  });
+
+  const results = Object.entries(monthlyData).map(([yearMonth, stats]) => ({
+    yearMonth,
+    monthName: stats.monthName,
+    percentage: stats.total > 0 ? Math.round((stats.attended / stats.total) * 100) : 100,
+  }));
+
+  return results;
+}
+
+// ==========================================
+// TEACHER ACTIONS
+// ==========================================
+
+export async function teacherLoginAction(formData: FormData) {
+  const email = formData.get('email') as string;
+  const password = formData.get('password') as string;
+
+  if (!email || !password) {
+    return { success: false, error: 'Email and password are required.' };
+  }
+
+  const teacher = await findTeacherByEmail(email);
+  if (!teacher) {
+    return { success: false, error: 'Invalid email or password.' };
+  }
+
+  const isMatch = verifyPassword(password, teacher.password);
+  if (!isMatch) {
+    return { success: false, error: 'Invalid email or password.' };
+  }
+
+  await setTeacherSession(teacher.email, teacher.id);
+  return { success: true };
+}
+
+export async function teacherLogoutAction() {
+  await clearTeacherSession();
+  return { success: true };
+}
+
+export async function addTeacherAction(data: {
+  name: string;
+  email: string;
+  password?: string;
+  department?: string;
+}) {
+  if (!(await isAdminAuthenticated())) {
+    throw new Error('Unauthorized');
+  }
+
+  if (!data.name || !data.name.trim()) {
+    return { success: false, error: 'Name is required.' };
+  }
+
+  if (!data.email || !data.email.trim()) {
+    return { success: false, error: 'Email is required.' };
+  }
+
+  if (!data.password || !data.password.trim()) {
+    return { success: false, error: 'Password is required.' };
+  }
+
+  try {
+    const hashedPassword = hashPassword(data.password.trim());
+    await addTeacher({
+      name: data.name,
+      email: data.email,
+      password: hashedPassword,
+      department: data.department
+    });
+    revalidatePath('/settings');
+    return { success: true };
+  } catch (error: any) {
+    if (error.code === 'P2002') {
+      return { success: false, error: 'Teacher email already exists.' };
+    }
+    return { success: false, error: 'Failed to add teacher.' };
+  }
+}
+
+export async function getTeachersAction() {
+  if (!(await isAdminAuthenticated())) {
+    throw new Error('Unauthorized');
+  }
+  return getAllTeachers();
+}
+
+export async function deleteTeacherAction(id: number) {
+  if (!(await isAdminAuthenticated())) {
+    throw new Error('Unauthorized');
+  }
+  try {
+    await deleteTeacher(id);
+    revalidatePath('/settings');
+    return { success: true };
+  } catch (error) {
+    return { success: false, error: 'Failed to delete teacher.' };
+  }
+}
+
+export async function checkUserRoleAction() {
+  const isAdmin = await isAdminAuthenticated();
+  const isTeacher = await isTeacherAuthenticated();
+  return { success: true, isAdmin, isTeacher };
+}
+
+export async function getDailyAttendanceSummaryAction(dateString: string) {
+  if (!(await isStaffAuthenticated())) {
+    throw new Error('Unauthorized');
+  }
+
+  const targetDate = normalizeDate(new Date(dateString));
+
+  // Fetch all active students
+  const students = await prisma.student.findMany({
+    orderBy: { registerNumber: 'asc' },
+  });
+
+  // Fetch attendance records for the date
+  const attendances = await prisma.attendance.findMany({
+    where: { date: targetDate },
+  });
+
+  const absentStudentsList: any[] = [];
+  let presentTodayCount = 0;
+
+  students.forEach((student) => {
+    const rec = attendances.find((a) => a.studentId === student.id);
+    if (rec && (rec.status === 'Absent' || rec.status === 'Long Absent')) {
+      absentStudentsList.push({
+        id: student.id,
+        registerNumber: student.registerNumber,
+        studentName: student.studentName,
+        email: student.email,
+        department: student.department,
+        year: student.year,
+        section: student.section,
+        status: rec.status,
+        statusSummaryText: rec.status,
+      });
+    } else {
+      presentTodayCount++;
+    }
+  });
+
+  return {
+    success: true,
+    date: dateString,
+    totalStudents: students.length,
+    presentTodayCount,
+    absentTodayCount: absentStudentsList.length,
+    absentStudentsList,
+  };
 }
 

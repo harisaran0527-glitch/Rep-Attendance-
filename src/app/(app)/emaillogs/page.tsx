@@ -90,7 +90,7 @@ export default function EmailLogsPage() {
       <div className="flex items-center gap-3">
         <input
           type="text"
-          placeholder="Filter by name, registration number, email or status..."
+          placeholder="Filter by name, roll number, email or status..."
           value={searchQuery}
           onChange={(e) => setSearchQuery(e.target.value)}
           className="block w-full max-w-md px-4 py-2.5 bg-slate-900/50 border border-slate-700/50 rounded-xl text-slate-100 placeholder-slate-500 focus:outline-none focus:ring-1 focus:ring-indigo-500 text-xs"

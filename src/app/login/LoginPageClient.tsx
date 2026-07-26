@@ -3,11 +3,12 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { loginAction } from '@/app/actions';
-import { Lock, Mail, AlertCircle, Loader2 } from 'lucide-react';
+import { Lock, Mail, AlertCircle, Loader2, Eye, EyeOff } from 'lucide-react';
 
 export default function LoginPageClient() {
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
   const router = useRouter();
 
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
@@ -73,8 +74,7 @@ export default function LoginPageClient() {
                   name="email"
                   type="email"
                   required
-                  defaultValue="admin@gmail.com"
-                  placeholder="admin@gmail.com"
+                  placeholder="Enter email address"
                   className="block w-full pl-11 pr-4 py-3 bg-slate-900/50 border border-slate-700/50 rounded-xl text-slate-100 placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/50 focus:border-indigo-500 transition-all text-sm"
                 />
               </div>
@@ -91,12 +91,18 @@ export default function LoginPageClient() {
                 <input
                   id="password"
                   name="password"
-                  type="password"
+                  type={showPassword ? 'text' : 'password'}
                   required
-                  defaultValue="admin123"
-                  placeholder="••••••••"
-                  className="block w-full pl-11 pr-4 py-3 bg-slate-900/50 border border-slate-700/50 rounded-xl text-slate-100 placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/50 focus:border-indigo-500 transition-all text-sm"
+                  placeholder="Enter password"
+                  className="block w-full pl-11 pr-12 py-3 bg-slate-900/50 border border-slate-700/50 rounded-xl text-slate-100 placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/50 focus:border-indigo-500 transition-all text-sm"
                 />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword(!showPassword)}
+                  className="absolute inset-y-0 right-0 pr-3.5 flex items-center text-slate-400 hover:text-slate-200 cursor-pointer"
+                >
+                  {showPassword ? <EyeOff className="h-5 h-5" /> : <Eye className="h-5 h-5" />}
+                </button>
               </div>
             </div>
 

@@ -6,7 +6,7 @@ generator client {
 }
 
 datasource db {
-  provider = "sqlite"
+  provider = "postgresql"
   url      = env("DATABASE_URL")
 }
 
@@ -21,6 +21,7 @@ model Student {
   registerNumber String       @unique
   studentName    String
   email          String       @unique
+  password       String       @default("")
   department     String
   year           String
   section        String
@@ -33,14 +34,14 @@ model Attendance {
   id        Int      @id @default(autoincrement())
   studentId Int
   date      DateTime
-  period    Int
+  period    Int      @default(1)
   status    String
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
   student   Student  @relation(fields: [studentId], references: [id], onDelete: Cascade)
 
-  @@unique([studentId, date, period])
+  @@unique([studentId, date])
 }
 
 model EmailLog {
@@ -66,4 +67,13 @@ model SmtpSettings {
   senderName   String  @default("College Attendance Portal")
   senderEmail  String  @default("")
   lowThreshold Float   @default(75.0)
+}
+
+model Teacher {
+  id         Int      @id @default(autoincrement())
+  name       String
+  email      String   @unique
+  password   String
+  department String   @default("CSE")
+  createdAt  DateTime @default(now())
 }

@@ -15,34 +15,59 @@ export async function sendLowAttendanceEmail(
   studentEmail: string,
   percentage: number,
   threshold: number,
-  smtpSettings: SmtpConfig
+  smtpSettings: SmtpConfig,
+  attended: number = 0,
+  total: number = 0
 ): Promise<{ success: boolean; status: 'Sent' | 'Simulated'; error?: string }> {
-  const subject = `Urgent: Low Attendance Warning (${percentage}%)`;
+  // Calculate classes needed to reach threshold
+  const classesNeeded = total > 0 ? Math.max(0, Math.ceil(3 * total - 4 * attended)) : 0;
+  
+  const subject = `Attendance Notice: Low Attendance Alert (${percentage}%)`;
   const bodyHtml = `
-    <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #e2e8f0; border-radius: 12px; background-color: #ffffff;">
-      <h2 style="color: #dc2626; border-bottom: 2px solid #fecaca; padding-bottom: 10px; margin-top: 0;">Attendance Alert</h2>
-      <p>Dear <strong>${studentName}</strong>,</p>
-      <p>This email is to notify you that your current overall attendance percentage has fallen to <strong>${percentage}%</strong>.</p>
-      <p>The minimum attendance percentage required by the college is <strong>${threshold}%</strong>.</p>
-      <p style="background-color: #fef2f2; border-left: 4px solid #f87171; padding: 12px; color: #991b1b; font-weight: 500;">
-        You are currently below the required attendance threshold. Please contact your department advisor immediately to discuss your attendance standing.
-      </p>
-      <p style="color: #64748b; font-size: 13px; margin-top: 24px;">
-        Sincerely,<br />
-        <strong>${smtpSettings.senderName || 'College Administration'}</strong><br />
-        Attendance Monitoring System
-      </p>
+    <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 24px; border: 1px solid #e2e8f0; border-radius: 16px; background-color: #ffffff; color: #1e293b;">
+      <div style="text-align: center; padding-bottom: 16px; border-bottom: 2px solid #f1f5f9;">
+        <h2 style="color: #e11d48; margin: 0; font-size: 20px;">Low Attendance Notification</h2>
+        <p style="color: #64748b; font-size: 13px; margin-top: 4px;">College Attendance Monitoring System</p>
+      </div>
+
+      <div style="padding: 20px 0;">
+        <p style="font-size: 15px; margin: 0 0 12px 0;">Dear <strong>${studentName}</strong>,</p>
+        <p style="font-size: 14px; line-height: 1.6; color: #334155; margin: 0 0 16px 0;">
+          We are writing to gently inform you that your current overall attendance percentage is <strong>${percentage}%</strong> (${attended} out of ${total} periods attended).
+        </p>
+
+        <div style="background-color: #fff1f2; border: 1px solid #fecdd3; border-left: 4px solid #e11d48; padding: 16px; border-radius: 8px; margin: 20px 0;">
+          <p style="margin: 0 0 8px 0; font-size: 14px; color: #9f1239; font-weight: 600;">
+            ⚠️ Required Attendance Threshold: ${threshold}%
+          </p>
+          <p style="margin: 0 0 8px 0; font-size: 13px; color: #be123c; line-height: 1.5;">
+            Your attendance is currently below the mandatory ${threshold}% requirement. We strongly encourage you to attend your regular classes consistently to improve your standing.
+          </p>
+          ${classesNeeded > 0 ? `<p style="margin: 8px 0 0 0; font-size: 13px; color: #881337; font-weight: 600;">👉 Target Advice: You need to attend the next <strong>${classesNeeded}</strong> periods consecutively to reach the ${threshold}% mark.</p>` : ''}
+        </div>
+
+        <p style="font-size: 13px; line-height: 1.6; color: #475569; margin: 16px 0 0 0;">
+          If you have any valid medical reasons or duty approvals, please submit the necessary documents to your class advisor at the earliest.
+        </p>
+      </div>
+
+      <div style="border-top: 1px solid #f1f5f9; padding-top: 16px; font-size: 12px; color: #64748b;">
+        <p style="margin: 0;">Warm regards,</p>
+        <p style="margin: 4px 0 0 0; font-weight: bold; color: #1e293b;">${smtpSettings.senderName || 'College Administration'}</p>
+      </div>
     </div>
   `;
 
   const bodyText = `
     Dear ${studentName},
     
-    This is an automated notification that your overall attendance is currently ${percentage}%.
+    We are writing to inform you that your current overall attendance is ${percentage}% (${attended}/${total} periods).
     
-    The minimum required attendance is ${threshold}%.
+    The minimum required attendance threshold is ${threshold}%.
     
-    Please contact your advisor immediately.
+    Your attendance has fallen below the required threshold. Please make sure to attend upcoming classes consistently to improve your attendance percentage.
+    
+    Target Advice: You need to attend the next ${classesNeeded} periods consecutively to reach ${threshold}%.
     
     Sincerely,
     ${smtpSettings.senderName || 'College Administration'}

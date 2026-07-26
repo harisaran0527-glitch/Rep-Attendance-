@@ -4,14 +4,11 @@ import { useState, useEffect } from 'react';
 import {
   getAllStudents,
   getDailyReportAction,
-  getSubjectWiseReportAction,
   getStudentWiseReportAction,
 } from '@/app/actions';
-import { SUBJECTS, PeriodNumber } from '@/lib/db-api';
 import {
   FileText,
   Calendar,
-  BookOpen,
   User,
   Loader2,
   FileSpreadsheet,
@@ -20,15 +17,8 @@ import {
   TrendingUp,
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
-import { jsPDF } from 'jspdf';
-import 'jspdf-autotable';
-
-// Add typescript declaration for jspdf-autotable
-declare module 'jspdf' {
-  interface jsPDF {
-    autoTable: (options: any) => jsPDF;
-  }
-}
+import jsPDF from 'jspdf';
+import autoTable from 'jspdf-autotable';
 
 interface Student {
   id: number;
@@ -40,138 +30,89 @@ interface Student {
 }
 
 export default function ReportsPage() {
-  const [activeTab, setActiveTab] = useState<'daily' | 'subject' | 'student'>('daily');
+  const [activeTab, setActiveTab] = useState<'daily' | 'student'>('daily');
   const [students, setStudents] = useState<Student[]>([]);
   const [loading, setLoading] = useState(false);
   const [reportData, setReportData] = useState<any[]>([]);
 
-  // Filter States
+  // Daily Report State
   const [dailyDate, setDailyDate] = useState<string>(new Date().toISOString().split('T')[0]);
-  
-  const [subjectPeriod, setSubjectPeriod] = useState<number>(1);
-  const [subjectStartDate, setSubjectStartDate] = useState<string>(
-    new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0] // 7 days ago
-  );
-  const [subjectEndDate, setSubjectEndDate] = useState<string>(
-    new Date().toISOString().split('T')[0]
-  );
 
+  // Student Report State
   const [selectedStudentId, setSelectedStudentId] = useState<string>('');
-  const [studentStartDate, setStudentStartDate] = useState<string>(
-    new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0] // 30 days ago
-  );
-  const [studentEndDate, setStudentEndDate] = useState<string>(
-    new Date().toISOString().split('T')[0]
-  );
   const [selectedStudentDetails, setSelectedStudentDetails] = useState<Student | null>(null);
+  const [studentStartDate, setStudentStartDate] = useState<string>(
+    new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]
+  );
+  const [studentEndDate, setStudentEndDate] = useState<string>(new Date().toISOString().split('T')[0]);
 
-  // Load students for dropdown
+  // Load active student list on mount
   useEffect(() => {
-    const loadStudents = async () => {
+    async function loadStudents() {
       try {
-        const data = await getAllStudents();
-        setStudents(data);
-        if (data.length > 0) {
-          setSelectedStudentId(data[0].id.toString());
+        const list = await getAllStudents();
+        setStudents(list);
+        if (list.length > 0) {
+          setSelectedStudentId(String(list[0].id));
         }
       } catch (err) {
-        console.error('Error loading students:', err);
+        console.error('Failed to load students for reports:', err);
       }
-    };
+    }
     loadStudents();
   }, []);
 
-  // Fetch Report Data
-  const generateReport = async () => {
+  // Fetch report data on parameters change
+  const fetchReport = async () => {
     setLoading(true);
     try {
       if (activeTab === 'daily') {
         const data = await getDailyReportAction(dailyDate);
         setReportData(data);
-      } else if (activeTab === 'subject') {
-        const data = await getSubjectWiseReportAction(
-          subjectStartDate,
-          subjectEndDate,
-          subjectPeriod
-        );
-        setReportData(data);
       } else if (activeTab === 'student') {
         if (!selectedStudentId) return;
-        const sId = Number(selectedStudentId);
-        const student = students.find((s) => s.id === sId) || null;
-        setSelectedStudentDetails(student);
-        const result = await getStudentWiseReportAction(sId, studentStartDate, studentEndDate);
-        setReportData(result.report);
+        const res = await getStudentWiseReportAction(
+          Number(selectedStudentId),
+          studentStartDate,
+          studentEndDate
+        );
+        setSelectedStudentDetails(res.student);
+        setReportData(res.report);
       }
-    } catch (error) {
-      console.error('Error generating report:', error);
+    } catch (err) {
+      console.error('Failed to fetch report:', err);
     } finally {
       setLoading(false);
     }
   };
 
   useEffect(() => {
-    generateReport();
-  }, [
-    activeTab,
-    dailyDate,
-    subjectPeriod,
-    subjectStartDate,
-    subjectEndDate,
-    selectedStudentId,
-    studentStartDate,
-    studentEndDate,
-  ]);
+    fetchReport();
+  }, [activeTab, dailyDate, selectedStudentId, studentStartDate, studentEndDate]);
 
-  // ==========================================
   // EXPORT EXCEL LOGIC
-  // ==========================================
   const exportToExcel = () => {
-    let sheetData: any[] = [];
+    if (reportData.length === 0) return;
+
     let fileName = '';
+    let sheetData: any[] = [];
 
     if (activeTab === 'daily') {
-      fileName = `Daily_Attendance_${dailyDate}.xlsx`;
+      fileName = `Daily_Attendance_Report_${dailyDate}.xlsx`;
       sheetData = reportData.map((row) => ({
-        'Register No': row.registerNumber,
+        'Roll Number': row.registerNumber,
         'Student Name': row.studentName,
-        'Dept': row.department,
+        'Department': row.department,
         'Year': row.year,
-        'Sec': row.section,
-        'Period 1 (Java)': row[1],
-        'Period 2 (DS)': row[2],
-        'Period 3 (EDA)': row[3],
-        'Period 4 (OS)': row[4],
-        'Period 5 (DM)': row[5],
-      }));
-    } else if (activeTab === 'subject') {
-      const subjectName = SUBJECTS[subjectPeriod as PeriodNumber];
-      fileName = `${subjectName.replace(/\s+/g, '_')}_Report_${subjectStartDate}_to_${subjectEndDate}.xlsx`;
-      sheetData = reportData.map((row) => ({
-        'Register No': row.registerNumber,
-        'Student Name': row.studentName,
-        'Dept': row.department,
-        'Year': row.year,
-        'Sec': row.section,
-        'Total Classes': row.totalClasses,
-        'Present': row.present,
-        'Absent': row.absent,
-        'Late': row.late,
-        'On Duty (OD)': row.od,
-        'Medical Leave (ML)': row.ml,
-        'Long Absent': row.la,
-        'Attendance %': `${row.percentage}%`,
+        'Section': row.section,
+        'Daily Status': row[1] || 'Unmarked',
       }));
     } else if (activeTab === 'student') {
       const name = selectedStudentDetails?.studentName.replace(/\s+/g, '_') || 'Student';
-      fileName = `${name}_Report_${studentStartDate}_to_${studentEndDate}.xlsx`;
+      fileName = `${name}_Attendance_Report_${studentStartDate}_to_${studentEndDate}.xlsx`;
       sheetData = reportData.map((row) => ({
         'Date': row.date,
-        'Period 1 (Java)': row[1],
-        'Period 2 (DS)': row[2],
-        'Period 3 (EDA)': row[3],
-        'Period 4 (OS)': row[4],
-        'Period 5 (DM)': row[5],
+        'Status': row[1] || 'Unmarked',
       }));
     }
 
@@ -181,14 +122,11 @@ export default function ReportsPage() {
     XLSX.writeFile(wb, fileName);
   };
 
-  // ==========================================
   // EXPORT PDF LOGIC
-  // ==========================================
   const exportToPDF = () => {
-    const doc = new jsPDF(activeTab === 'subject' ? 'landscape' : 'portrait');
+    const doc = new jsPDF('portrait');
     const primaryColor = [15, 23, 42]; // Slate 900
 
-    // Add Header
     doc.setFillColor(primaryColor[0], primaryColor[1], primaryColor[2]);
     doc.rect(0, 0, doc.internal.pageSize.width, 24, 'F');
     
@@ -203,120 +141,105 @@ export default function ReportsPage() {
     const todayStr = new Date().toLocaleDateString();
     doc.text(`Generated: ${todayStr}`, doc.internal.pageSize.width - 45, 15);
 
-    // Setup contents depending on tab
     let subtitle = '';
     let headers: string[][] = [];
     let rows: any[][] = [];
 
     if (activeTab === 'daily') {
       subtitle = `Daily Attendance Report - Date: ${dailyDate}`;
-      headers = [[
-        'Register No', 'Student Name', 'Dept', 'Year', 'Sec',
-        'P1 (Java)', 'P2 (DS)', 'P3 (EDA)', 'P4 (OS)', 'P5 (DM)'
-      ]];
+      headers = [['Roll Number', 'Student Name', 'Dept', 'Year', 'Sec', 'Status']];
       rows = reportData.map((row) => [
         row.registerNumber,
         row.studentName,
         row.department,
         row.year,
         row.section,
-        row[1], row[2], row[3], row[4], row[5]
-      ]);
-    } else if (activeTab === 'subject') {
-      const subjectName = SUBJECTS[subjectPeriod as PeriodNumber];
-      subtitle = `Subject-wise Report: ${subjectName} (Period ${subjectPeriod}) | Range: ${subjectStartDate} to ${subjectEndDate}`;
-      headers = [[
-        'Register No', 'Student Name', 'Dept', 'Yr/Sec', 'Total',
-        'Present', 'Absent', 'Late', 'OD', 'ML', 'LA', '%'
-      ]];
-      rows = reportData.map((row) => [
-        row.registerNumber,
-        row.studentName,
-        row.department,
-        `${row.year} ${row.section}`,
-        row.totalClasses,
-        row.present,
-        row.absent,
-        row.late,
-        row.od,
-        row.ml,
-        row.la,
-        `${row.percentage}%`
+        row[1] || 'Unmarked',
       ]);
     } else if (activeTab === 'student') {
-      subtitle = `Student-wise Report: ${selectedStudentDetails?.studentName || 'Student'} (${selectedStudentDetails?.registerNumber || ''}) | Range: ${studentStartDate} to ${studentEndDate}`;
-      headers = [[
-        'Date', 'Period 1 (Java)', 'Period 2 (DS)', 'Period 3 (EDA)', 'Period 4 (OS)', 'Period 5 (DM)'
-      ]];
-      rows = reportData.map((row) => [
-        row.date,
-        row[1], row[2], row[3], row[4], row[5]
-      ]);
+      const name = selectedStudentDetails?.studentName || '';
+      const reg = selectedStudentDetails?.registerNumber || '';
+      subtitle = `Student Attendance Log: ${name} (${reg}) | Range: ${studentStartDate} to ${studentEndDate}`;
+      headers = [['Date', 'Status']];
+      rows = reportData.map((row) => [row.date, row[1] || 'Unmarked']);
     }
 
-    doc.setTextColor(primaryColor[0], primaryColor[1], primaryColor[2]);
     doc.setFontSize(11);
     doc.setFont('helvetica', 'bold');
+    doc.setTextColor(30, 41, 59);
     doc.text(subtitle, 14, 34);
 
-    doc.autoTable({
+    autoTable(doc, {
       startY: 40,
       head: headers,
       body: rows,
       theme: 'grid',
       headStyles: {
-        fillColor: primaryColor,
-        textColor: [255, 255, 255],
-        fontStyle: 'bold',
+        fillColor: [79, 70, 229], // Indigo 600
+        textColor: 255,
         fontSize: 9,
-        halign: 'center',
+        fontStyle: 'bold',
       },
-      bodyStyles: {
+      styles: {
         fontSize: 8,
-        textColor: [50, 50, 50],
-      },
-      columnStyles: {
-        0: { halign: 'left' },
-        1: { halign: 'left' },
+        cellPadding: 3,
       },
       alternateRowStyles: {
-        fillColor: [245, 247, 250],
+        fillColor: [248, 250, 252],
       },
     });
 
-    const nameForSave = activeTab === 'student'
-      ? `${selectedStudentDetails?.studentName.replace(/\s+/g, '_') || 'Student'}_Report`
-      : `${activeTab}_Report`;
+    const outputName = activeTab === 'daily'
+      ? `Daily_Report_${dailyDate}.pdf`
+      : `Student_Report_${selectedStudentDetails?.registerNumber || 'Log'}.pdf`;
 
-    doc.save(`${nameForSave}.pdf`);
+    doc.save(outputName);
   };
 
   return (
-    <div className="space-y-6 max-w-7xl mx-auto">
-      {/* Tab Navigation header */}
-      <div className="flex gap-1.5 p-1 bg-slate-900 border border-slate-800 rounded-2xl w-full sm:w-max">
-        {[
-          { id: 'daily', name: 'Daily Attendance' },
-          { id: 'subject', name: 'Subject-wise' },
-          { id: 'student', name: 'Student-wise' },
-        ].map((tab) => (
+    <div className="space-y-8 max-w-7xl mx-auto">
+      {/* Header section with Tabs */}
+      <div className="glass p-6 rounded-2xl flex flex-col md:flex-row gap-6 justify-between items-start md:items-center">
+        <div>
+          <h3 className="text-lg font-semibold text-slate-100 flex items-center gap-2">
+            <FileText className="w-5 h-5 text-indigo-400" />
+            <span>Attendance Reports & Exports</span>
+          </h3>
+          <p className="text-xs text-slate-400 mt-1">
+            Generate and export daily and student date-range attendance reports to Excel or PDF.
+          </p>
+        </div>
+
+        {/* Tab Buttons */}
+        <div className="flex bg-slate-950/60 p-1.5 rounded-xl border border-slate-800/80">
           <button
-            key={tab.id}
-            onClick={() => setActiveTab(tab.id as any)}
-            className={`flex-1 sm:flex-initial px-6 py-2.5 rounded-xl text-xs font-semibold tracking-wide transition-all cursor-pointer ${
-              activeTab === tab.id
-                ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-600/10'
-                : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/40'
+            onClick={() => setActiveTab('daily')}
+            className={`flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
+              activeTab === 'daily'
+                ? 'bg-indigo-600 text-white shadow-md'
+                : 'text-slate-400 hover:text-slate-200'
             }`}
           >
-            {tab.name}
+            <Calendar className="w-4 h-4" />
+            <span>Daily Report</span>
           </button>
-        ))}
+          <button
+            onClick={() => setActiveTab('student')}
+            className={`flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
+              activeTab === 'student'
+                ? 'bg-indigo-600 text-white shadow-md'
+                : 'text-slate-400 hover:text-slate-200'
+            }`}
+          >
+            <User className="w-4 h-4" />
+            <span>Student Range Report</span>
+          </button>
+        </div>
       </div>
 
-      {/* Dynamic Filters Area Card */}
-      <div className="glass p-6 rounded-2xl border border-slate-800 space-y-6">
-        <h4 className="text-sm font-semibold text-slate-200 flex items-center gap-2">
+      {/* Configuration & Filter Controls */}
+      <div className="glass p-6 rounded-2xl border border-slate-800 space-y-4">
+        <h4 className="text-xs font-bold uppercase tracking-wider text-slate-400 flex items-center gap-2">
           <FileText className="w-4.5 h-4.5 text-indigo-400" />
           <span>Report Configuration</span>
         </h4>
@@ -337,53 +260,7 @@ export default function ReportsPage() {
             </div>
           )}
 
-          {/* TAB 2: Subject Report Filters */}
-          {activeTab === 'subject' && (
-            <>
-              <div>
-                <label className="block text-[10px] uppercase font-bold tracking-wider text-slate-400 mb-1.5">
-                  Subject (Period)
-                </label>
-                <select
-                  value={subjectPeriod}
-                  onChange={(e) => setSubjectPeriod(Number(e.target.value))}
-                  className="w-full px-3.5 py-2.5 bg-slate-950/50 border border-slate-700/50 rounded-xl text-slate-200 text-sm focus:outline-none focus:ring-1 focus:ring-indigo-500 cursor-pointer"
-                >
-                  {[1, 2, 3, 4, 5].map((p) => (
-                    <option key={p} value={p}>
-                      Period {p} ({SUBJECTS[p as PeriodNumber]})
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              <div>
-                <label className="block text-[10px] uppercase font-bold tracking-wider text-slate-400 mb-1.5">
-                  Start Date
-                </label>
-                <input
-                  type="date"
-                  value={subjectStartDate}
-                  onChange={(e) => setSubjectStartDate(e.target.value)}
-                  className="w-full px-3.5 py-2.5 bg-slate-950/50 border border-slate-700/50 rounded-xl text-slate-200 text-sm focus:outline-none focus:ring-1 focus:ring-indigo-500"
-                />
-              </div>
-
-              <div>
-                <label className="block text-[10px] uppercase font-bold tracking-wider text-slate-400 mb-1.5">
-                  End Date
-                </label>
-                <input
-                  type="date"
-                  value={subjectEndDate}
-                  onChange={(e) => setSubjectEndDate(e.target.value)}
-                  className="w-full px-3.5 py-2.5 bg-slate-950/50 border border-slate-700/50 rounded-xl text-slate-200 text-sm focus:outline-none focus:ring-1 focus:ring-indigo-500"
-                />
-              </div>
-            </>
-          )}
-
-          {/* TAB 3: Student Report Filters */}
+          {/* TAB 2: Student Report Filters */}
           {activeTab === 'student' && (
             <>
               <div>
@@ -398,7 +275,7 @@ export default function ReportsPage() {
                   <option value="" disabled>Choose a student...</option>
                   {students.map((student) => (
                     <option key={student.id} value={student.id}>
-                      {student.registerNumber} - {student.studentName}
+                      {student.registerNumber} - {student.studentName} ({student.department})
                     </option>
                   ))}
                 </select>
@@ -431,33 +308,37 @@ export default function ReportsPage() {
           )}
         </div>
 
-        {/* Action Buttons to print / download */}
-        {reportData.length > 0 && (
-          <div className="pt-4 border-t border-slate-800 flex flex-wrap gap-3">
-            <button
-              onClick={exportToExcel}
-              className="flex items-center gap-2 px-5 py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white font-medium rounded-xl shadow-lg shadow-emerald-600/10 transition-colors text-sm cursor-pointer"
-            >
-              <FileSpreadsheet className="w-4.5 h-4.5" />
-              <span>Export to Excel (.xlsx)</span>
-            </button>
-            <button
-              onClick={exportToPDF}
-              className="flex items-center gap-2 px-5 py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white font-medium rounded-xl shadow-lg shadow-indigo-600/10 transition-colors text-sm cursor-pointer"
-            >
-              <Printer className="w-4.5 h-4.5" />
-              <span>Export Professional PDF</span>
-            </button>
-          </div>
-        )}
+        {/* Action Export Buttons */}
+        <div className="flex flex-wrap items-center justify-end gap-3 pt-4 border-t border-slate-800">
+          <button
+            onClick={exportToExcel}
+            disabled={loading || reportData.length === 0}
+            className="flex items-center gap-2 px-4 py-2 bg-emerald-600/20 hover:bg-emerald-600/30 text-emerald-400 border border-emerald-500/30 rounded-xl text-xs font-semibold disabled:opacity-50 transition-all cursor-pointer"
+          >
+            <FileSpreadsheet className="w-4 h-4" />
+            <span>Export Excel (.xlsx)</span>
+          </button>
+
+          <button
+            onClick={exportToPDF}
+            disabled={loading || reportData.length === 0}
+            className="flex items-center gap-2 px-4 py-2 bg-rose-600/20 hover:bg-rose-600/30 text-rose-400 border border-rose-500/30 rounded-xl text-xs font-semibold disabled:opacity-50 transition-all cursor-pointer"
+          >
+            <Printer className="w-4 h-4" />
+            <span>Export PDF (.pdf)</span>
+          </button>
+        </div>
       </div>
 
-      {/* Report Data Preview Table */}
+      {/* Main Report Data Table Preview */}
       <div className="glass rounded-2xl border border-slate-800 overflow-hidden shadow-xl">
-        <div className="p-4 bg-slate-950/20 border-b border-slate-850">
-          <h5 className="text-xs uppercase font-bold tracking-wider text-slate-400">
-            Live Preview (Found {reportData.length} records)
-          </h5>
+        <div className="px-6 py-4 bg-slate-950/30 border-b border-slate-800 flex justify-between items-center">
+          <h4 className="text-sm font-bold text-slate-100 flex items-center gap-2">
+            <span>Report Preview</span>
+            <span className="text-xs font-normal text-slate-400 font-mono">
+              ({reportData.length} records found)
+            </span>
+          </h4>
         </div>
 
         {loading ? (
@@ -465,127 +346,67 @@ export default function ReportsPage() {
             <Loader2 className="w-8 h-8 text-indigo-500 animate-spin" />
           </div>
         ) : reportData.length === 0 ? (
-          <div className="text-center py-20 text-slate-500">
-            No records matched criteria. Refine filters to display details.
+          <div className="text-center py-20 px-4 text-slate-500 text-sm">
+            No attendance records found matching criteria.
           </div>
         ) : (
           <div className="overflow-x-auto custom-scrollbar">
             <table className="w-full text-left border-collapse text-xs">
-              {/* Daily Report Table Headers */}
-              {activeTab === 'daily' && (
-                <>
-                  <thead>
-                    <tr className="bg-slate-950/40 border-b border-slate-800 text-[10px] font-bold uppercase tracking-wider text-slate-400">
-                      <th className="px-6 py-4">Register No</th>
-                      <th className="px-6 py-4">Student Name</th>
-                      <th className="px-6 py-4">Dept</th>
-                      <th className="px-6 py-4">Yr/Sec</th>
-                      <th className="px-6 py-4 text-center">P1 (Java)</th>
-                      <th className="px-6 py-4 text-center">P2 (DS)</th>
-                      <th className="px-6 py-4 text-center">P3 (EDA)</th>
-                      <th className="px-6 py-4 text-center">P4 (OS)</th>
-                      <th className="px-6 py-4 text-center">P5 (DM)</th>
+              <thead>
+                <tr className="bg-slate-950/60 border-b border-slate-800 font-bold uppercase tracking-wider text-slate-400">
+                  {activeTab === 'daily' && (
+                    <>
+                      <th className="px-5 py-3">Roll Number</th>
+                      <th className="px-5 py-3">Student Name</th>
+                      <th className="px-5 py-3">Dept</th>
+                      <th className="px-5 py-3">Yr / Sec</th>
+                      <th className="px-5 py-3">Daily Status</th>
+                    </>
+                  )}
+                  {activeTab === 'student' && (
+                    <>
+                      <th className="px-5 py-3">Date</th>
+                      <th className="px-5 py-3">Attendance Status</th>
+                    </>
+                  )}
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-850">
+                {activeTab === 'daily' &&
+                  reportData.map((row, idx) => (
+                    <tr key={idx} className="hover:bg-slate-800/10">
+                      <td className="px-5 py-3 font-mono text-indigo-300">{row.registerNumber}</td>
+                      <td className="px-5 py-3 font-semibold text-slate-100">{row.studentName}</td>
+                      <td className="px-5 py-3 text-slate-400">{row.department}</td>
+                      <td className="px-5 py-3 text-slate-400">{row.year} - {row.section}</td>
+                      <td className="px-5 py-3">
+                        <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
+                          row[1] === 'Present' ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20' :
+                          row[1] === 'Absent' ? 'bg-rose-500/10 text-rose-400 border border-rose-500/20' :
+                          'bg-slate-800 text-slate-300'
+                        }`}>
+                          {row[1] || 'Unmarked'}
+                        </span>
+                      </td>
                     </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-850">
-                    {reportData.map((row, idx) => (
-                      <tr key={idx} className="hover:bg-slate-800/10 transition-colors">
-                        <td className="px-6 py-3.5 font-mono text-slate-200">{row.registerNumber}</td>
-                        <td className="px-6 py-3.5 font-medium text-slate-100">{row.studentName}</td>
-                        <td className="px-6 py-3.5 text-slate-400">{row.department}</td>
-                        <td className="px-6 py-3.5 text-slate-400">{row.year} - {row.section}</td>
-                        {[1, 2, 3, 4, 5].map((p) => {
-                          const status = row[p];
-                          let sColor = 'text-slate-500';
-                          if (status === 'Present') sColor = 'text-emerald-400 font-bold';
-                          if (status === 'Absent') sColor = 'text-rose-400 font-bold';
-                          if (status === 'Late') sColor = 'text-amber-400 font-bold';
-                          if (status === 'On Duty (OD)') sColor = 'text-blue-400 font-bold';
-                          if (status === 'Medical Leave (ML)') sColor = 'text-purple-400 font-bold';
-                          return (
-                            <td key={p} className={`px-6 py-3.5 text-center ${sColor}`}>
-                              {status === 'Unmarked' || status === '-' ? '-' : status}
-                            </td>
-                          );
-                        })}
-                      </tr>
-                    ))}
-                  </tbody>
-                </>
-              )}
+                  ))}
 
-              {/* Subject-wise Report Table Headers */}
-              {activeTab === 'subject' && (
-                <>
-                  <thead>
-                    <tr className="bg-slate-950/40 border-b border-slate-800 text-[10px] font-bold uppercase tracking-wider text-slate-400">
-                      <th className="px-6 py-4">Register No</th>
-                      <th className="px-6 py-4">Student Name</th>
-                      <th className="px-6 py-4 text-center">Classes</th>
-                      <th className="px-6 py-4 text-center">Present</th>
-                      <th className="px-6 py-4 text-center">Absent</th>
-                      <th className="px-6 py-4 text-center">Late</th>
-                      <th className="px-6 py-4 text-center">OD</th>
-                      <th className="px-6 py-4 text-center">ML</th>
-                      <th className="px-6 py-4 text-center">LA</th>
-                      <th className="px-6 py-4 text-right">Attended %</th>
+                {activeTab === 'student' &&
+                  reportData.map((row, idx) => (
+                    <tr key={idx} className="hover:bg-slate-800/10">
+                      <td className="px-5 py-3 font-mono text-indigo-300">{row.date}</td>
+                      <td className="px-5 py-3">
+                        <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
+                          row[1] === 'Present' ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20' :
+                          row[1] === 'Absent' ? 'bg-rose-500/10 text-rose-400 border border-rose-500/20' :
+                          'bg-slate-800 text-slate-300'
+                        }`}>
+                          {row[1] || 'Unmarked'}
+                        </span>
+                      </td>
                     </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-850">
-                    {reportData.map((row, idx) => (
-                      <tr key={idx} className="hover:bg-slate-800/10 transition-colors">
-                        <td className="px-6 py-3.5 font-mono text-slate-200">{row.registerNumber}</td>
-                        <td className="px-6 py-3.5 font-medium text-slate-100">{row.studentName}</td>
-                        <td className="px-6 py-3.5 text-center text-slate-300 font-semibold">{row.totalClasses}</td>
-                        <td className="px-6 py-3.5 text-center text-emerald-400 font-semibold">{row.present}</td>
-                        <td className="px-6 py-3.5 text-center text-rose-400 font-semibold">{row.absent}</td>
-                        <td className="px-6 py-3.5 text-center text-amber-400">{row.late}</td>
-                        <td className="px-6 py-3.5 text-center text-blue-400">{row.od}</td>
-                        <td className="px-6 py-3.5 text-center text-purple-400">{row.ml}</td>
-                        <td className="px-6 py-3.5 text-center text-zinc-400">{row.la}</td>
-                        <td className="px-6 py-3.5 text-right font-bold text-slate-100">{row.percentage}%</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </>
-              )}
-
-              {/* Student-wise Report Table Headers */}
-              {activeTab === 'student' && (
-                <>
-                  <thead>
-                    <tr className="bg-slate-950/40 border-b border-slate-800 text-[10px] font-bold uppercase tracking-wider text-slate-400">
-                      <th className="px-6 py-4">Session Date</th>
-                      <th className="px-6 py-4 text-center">P1 (Java)</th>
-                      <th className="px-6 py-4 text-center">P2 (DS)</th>
-                      <th className="px-6 py-4 text-center">P3 (EDA)</th>
-                      <th className="px-6 py-4 text-center">P4 (OS)</th>
-                      <th className="px-6 py-4 text-center">P5 (DM)</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-850">
-                    {reportData.map((row, idx) => (
-                      <tr key={idx} className="hover:bg-slate-800/10 transition-colors">
-                        <td className="px-6 py-3.5 font-medium text-slate-200">{row.date}</td>
-                        {[1, 2, 3, 4, 5].map((p) => {
-                          const status = row[p];
-                          let sColor = 'text-slate-500';
-                          if (status === 'Present') sColor = 'text-emerald-400 font-bold';
-                          if (status === 'Absent') sColor = 'text-rose-400 font-bold';
-                          if (status === 'Late') sColor = 'text-amber-400 font-bold';
-                          if (status === 'On Duty (OD)') sColor = 'text-blue-400 font-bold';
-                          if (status === 'Medical Leave (ML)') sColor = 'text-purple-400 font-bold';
-                          return (
-                            <td key={p} className={`px-6 py-3.5 text-center ${sColor}`}>
-                              {status === 'Unmarked' || status === '-' ? '-' : status}
-                            </td>
-                          );
-                        })}
-                      </tr>
-                    ))}
-                  </tbody>
-                </>
-              )}
+                  ))}
+              </tbody>
             </table>
           </div>
         )}

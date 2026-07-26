@@ -2,11 +2,11 @@
 
 import { useState, useEffect } from 'react';
 import {
-  getAllStudents,
-  getAttendanceForDateAndPeriodAction,
+  getAllStudentsWithStats,
+  getAttendanceForDateAction,
   saveBulkAttendanceAction,
 } from '@/app/actions';
-import { SUBJECTS, PeriodNumber, ATTENDANCE_STATUSES, AttendanceStatus } from '@/lib/db-api';
+import { ATTENDANCE_STATUSES, AttendanceStatus } from '@/lib/db-api';
 import {
   Calendar,
   Clock,
@@ -26,6 +26,7 @@ interface Student {
   department: string;
   year: string;
   section: string;
+  percentage?: number;
 }
 
 interface AttendanceMap {
@@ -40,31 +41,44 @@ export default function HistoryPage() {
   const [year, setYear] = useState<number>(today.getFullYear());
   const [date, setDate] = useState<string>(today.toISOString().split('T')[0]);
   
-  const [period, setPeriod] = useState<number>(1);
   const [attendance, setAttendance] = useState<AttendanceMap>({});
   
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [savingState, setSavingState] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
 
+  // Get number of days in selected month and year
+  const getDaysInMonth = (y: number, m: number) => {
+    return new Date(y, m, 0).getDate();
+  };
+
+  const daysLimit = getDaysInMonth(year, month);
+
+  // Keep selected day within valid limits for selected month/year
+  useEffect(() => {
+    const limit = getDaysInMonth(year, month);
+    if (day > limit) {
+      setDay(limit);
+    }
+  }, [month, year, day]);
+
   // Update full date whenever day/month/year changes
   useEffect(() => {
     const d = new Date(year, month - 1, day);
-    // adjust for local timezone offset when getting ISO string
     const offset = d.getTimezoneOffset();
     const localDate = new Date(d.getTime() - (offset * 60 * 1000));
     setDate(localDate.toISOString().split('T')[0]);
   }, [day, month, year]);
 
-  // Load students and active attendance for selected date/period
+  // Load students and active attendance for selected date
   const loadData = async () => {
     setLoading(true);
     setSavingState('idle');
     try {
-      const studentsData = await getAllStudents();
+      const studentsData = await getAllStudentsWithStats();
       setStudents(studentsData);
 
-      const attResult = await getAttendanceForDateAndPeriodAction(date, period);
+      const attResult = await getAttendanceForDateAction(date);
       if (attResult.success && attResult.data) {
         const newMap: AttendanceMap = {};
         studentsData.forEach((student: Student) => {
@@ -87,7 +101,7 @@ export default function HistoryPage() {
 
   useEffect(() => {
     loadData();
-  }, [date, period]);
+  }, [date]);
 
   // Handle live edit and save
   const handleStatusChange = async (studentId: number, status: AttendanceStatus) => {
@@ -97,7 +111,7 @@ export default function HistoryPage() {
     setSavingState('saving');
 
     try {
-      const result = await saveBulkAttendanceAction(date, period, [
+      const result = await saveBulkAttendanceAction(date, [
         { studentId, status },
       ]);
       if (result.success) {
@@ -128,8 +142,7 @@ export default function HistoryPage() {
       : 'bg-slate-900 border-slate-700 text-slate-400 hover:bg-slate-800 hover:text-slate-200';
   };
 
-  // Stat summary for this period
-  const totalMarked = Object.values(attendance).filter((s) => s !== 'Unmarked').length;
+  // Stat summary for this date
   const countStats = {
     Present: Object.values(attendance).filter((s) => s === 'Present').length,
     Absent: Object.values(attendance).filter((s) => s === 'Absent').length,
@@ -142,7 +155,7 @@ export default function HistoryPage() {
 
   return (
     <div className="space-y-6 max-w-7xl mx-auto">
-      {/* Date & Period filter card */}
+      {/* Date filter card */}
       <div className="glass p-6 rounded-2xl flex flex-col lg:flex-row gap-6 justify-between items-start lg:items-center">
         <div className="space-y-1">
           <h3 className="text-lg font-semibold text-slate-100 flex items-center gap-2">
@@ -150,11 +163,11 @@ export default function HistoryPage() {
             <span>Attendance History Logs</span>
           </h3>
           <p className="text-xs text-slate-400 flex items-center gap-1.5">
-            View & Edit records for: <strong className="text-indigo-400">{SUBJECTS[period as PeriodNumber]}</strong>
+            View & Edit daily records for date: <strong className="text-indigo-400">{date}</strong>
           </p>
         </div>
 
-        <div className="flex flex-wrap gap-4 w-full lg:w-auto">
+        <div className="flex items-center gap-4 w-full lg:w-auto">
           {/* Day/Month/Year Pickers */}
           <div className="flex flex-wrap gap-2 min-w-[280px]">
             <div className="flex-1">
@@ -164,7 +177,7 @@ export default function HistoryPage() {
                 onChange={(e) => setDay(Number(e.target.value))}
                 className="w-full px-2 py-2 bg-slate-950/50 border border-slate-700/50 rounded-xl text-slate-200 text-sm focus:outline-none focus:ring-1 focus:ring-indigo-500 cursor-pointer"
               >
-                {Array.from({ length: 31 }, (_, i) => i + 1).map(d => (
+                {Array.from({ length: daysLimit }, (_, i) => i + 1).map(d => (
                   <option key={d} value={d}>{d}</option>
                 ))}
               </select>
@@ -194,24 +207,6 @@ export default function HistoryPage() {
               </select>
             </div>
           </div>
-
-          {/* Period Selector */}
-          <div className="flex-1 min-w-[160px]">
-            <label className="block text-[10px] uppercase font-bold tracking-wider text-slate-400 mb-1.5">
-              Select Period
-            </label>
-            <select
-              value={period}
-              onChange={(e) => setPeriod(Number(e.target.value))}
-              className="w-full px-3 py-2 bg-slate-950/50 border border-slate-700/50 rounded-xl text-slate-200 text-sm focus:outline-none focus:ring-1 focus:ring-indigo-500 cursor-pointer"
-            >
-              {[1, 2, 3, 4, 5].map((p) => (
-                <option key={p} value={p}>
-                  Period {p} ({SUBJECTS[p as PeriodNumber]})
-                </option>
-              ))}
-            </select>
-          </div>
         </div>
       </div>
 
@@ -220,7 +215,7 @@ export default function HistoryPage() {
         {/* Autosave message */}
         <div className="flex items-center gap-2 text-sm">
           {savingState === 'saving' && (
-            <span className="flex items-center gap-1.5 text-indigo-400">
+            <span className="flex items-center gap-1.5 text-indigo-400 font-medium">
               <Loader2 className="w-4 h-4 animate-spin" />
               <span>Autosaving database change...</span>
             </span>
@@ -244,18 +239,18 @@ export default function HistoryPage() {
           )}
         </div>
 
-        {/* Attendance stats summary */}
+        {/* Attendance stats summary for this date */}
         <div className="flex flex-wrap items-center gap-3 bg-slate-900/50 border border-slate-800 rounded-2xl px-4 py-2 text-xs">
           <span className="text-slate-500 font-bold uppercase tracking-wider text-[10px]">
-            Log Summary:
+            Daily Summary ({date}):
           </span>
-          <span className="text-emerald-400">P: {countStats.Present}</span>
-          <span className="text-rose-400">A: {countStats.Absent}</span>
-          <span className="text-amber-400">L: {countStats.Late}</span>
-          <span className="text-blue-400">OD: {countStats['On Duty (OD)']}</span>
-          <span className="text-purple-400">ML: {countStats['Medical Leave (ML)']}</span>
-          <span className="text-slate-400">LA: {countStats['Long Absent']}</span>
-          <span className="text-slate-500">Unmarked: {countStats.Unmarked}</span>
+          <span className="text-emerald-400 font-bold">Present: {countStats.Present}</span>
+          <span className="text-rose-400 font-bold">Absent: {countStats.Absent}</span>
+          <span className="text-amber-400 font-medium">Late: {countStats.Late}</span>
+          <span className="text-blue-400 font-medium">OD: {countStats['On Duty (OD)']}</span>
+          <span className="text-purple-400 font-medium">ML: {countStats['Medical Leave (ML)']}</span>
+          <span className="text-slate-400 font-medium">LA: {countStats['Long Absent']}</span>
+          <span className="text-slate-500 font-medium">Unmarked: {countStats.Unmarked}</span>
         </div>
       </div>
 
@@ -293,8 +288,8 @@ export default function HistoryPage() {
             <table className="w-full text-left border-collapse text-sm">
               <thead>
                 <tr className="bg-slate-950/40 border-b border-slate-800 text-xs font-bold uppercase tracking-wider text-slate-400">
-                  <th className="px-6 py-4 w-1/4">Student Info</th>
-                  <th className="px-6 py-4 text-center">Marked Status & Edit Buttons</th>
+                  <th className="px-6 py-4 w-1/3">Student Details & Individual %</th>
+                  <th className="px-6 py-4 text-center">Marked Daily Status</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-850">
@@ -306,8 +301,17 @@ export default function HistoryPage() {
                       className="hover:bg-slate-800/10 transition-colors"
                     >
                       <td className="px-6 py-4">
-                        <div className="font-semibold text-slate-100">
+                        <div className="font-semibold text-slate-100 flex items-center gap-2">
                           {student.studentName}
+                          {student.percentage !== undefined && (
+                            <span className={`px-1.5 py-0.5 rounded-md text-[10px] font-bold ${
+                              student.percentage >= 75 ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20' :
+                              student.percentage >= 65 ? 'bg-yellow-500/10 text-yellow-400 border border-yellow-500/20' :
+                              'bg-red-500/10 text-red-400 border border-red-500/20'
+                            }`}>
+                              {student.percentage}%
+                            </span>
+                          )}
                         </div>
                         <div className="text-xs text-slate-400 mt-0.5 font-mono">
                           {student.registerNumber} &bull; {student.department} {student.year} Sec {student.section}
@@ -318,43 +322,43 @@ export default function HistoryPage() {
                           {/* Present */}
                           <button
                             onClick={() => handleStatusChange(student.id, 'Present')}
-                            className={`px-3 py-1.5 border rounded-xl text-xs font-bold transition-all cursor-pointer ${getStatusStyle(
+                            className={`px-4 py-2 border rounded-xl text-xs font-bold transition-all cursor-pointer ${getStatusStyle(
                               'Present',
                               currentStatus,
                               'bg-emerald-600 hover:bg-emerald-500'
                             )}`}
                           >
-                            P
+                            Present
                           </button>
 
                           {/* Absent */}
                           <button
                             onClick={() => handleStatusChange(student.id, 'Absent')}
-                            className={`px-3 py-1.5 border rounded-xl text-xs font-bold transition-all cursor-pointer ${getStatusStyle(
+                            className={`px-4 py-2 border rounded-xl text-xs font-bold transition-all cursor-pointer ${getStatusStyle(
                               'Absent',
                               currentStatus,
                               'bg-rose-600 hover:bg-rose-500'
                             )}`}
                           >
-                            A
+                            Absent
                           </button>
 
                           {/* Late */}
                           <button
                             onClick={() => handleStatusChange(student.id, 'Late')}
-                            className={`px-3 py-1.5 border rounded-xl text-xs font-bold transition-all cursor-pointer ${getStatusStyle(
+                            className={`px-3 py-2 border rounded-xl text-xs font-bold transition-all cursor-pointer ${getStatusStyle(
                               'Late',
                               currentStatus,
                               'bg-amber-600 hover:bg-amber-500'
                             )}`}
                           >
-                            L
+                            Late
                           </button>
 
                           {/* On Duty */}
                           <button
                             onClick={() => handleStatusChange(student.id, 'On Duty (OD)')}
-                            className={`px-3 py-1.5 border rounded-xl text-xs font-bold transition-all cursor-pointer ${getStatusStyle(
+                            className={`px-3 py-2 border rounded-xl text-xs font-bold transition-all cursor-pointer ${getStatusStyle(
                               'On Duty (OD)',
                               currentStatus,
                               'bg-blue-600 hover:bg-blue-500'
@@ -366,7 +370,7 @@ export default function HistoryPage() {
                           {/* Medical Leave */}
                           <button
                             onClick={() => handleStatusChange(student.id, 'Medical Leave (ML)')}
-                            className={`px-3 py-1.5 border rounded-xl text-xs font-bold transition-all cursor-pointer ${getStatusStyle(
+                            className={`px-3 py-2 border rounded-xl text-xs font-bold transition-all cursor-pointer ${getStatusStyle(
                               'Medical Leave (ML)',
                               currentStatus,
                               'bg-purple-600 hover:bg-purple-500'
@@ -378,7 +382,7 @@ export default function HistoryPage() {
                           {/* Long Absent */}
                           <button
                             onClick={() => handleStatusChange(student.id, 'Long Absent')}
-                            className={`px-3 py-1.5 border rounded-xl text-xs font-bold transition-all cursor-pointer ${getStatusStyle(
+                            className={`px-3 py-2 border rounded-xl text-xs font-bold transition-all cursor-pointer ${getStatusStyle(
                               'Long Absent',
                               currentStatus,
                               'bg-zinc-600 hover:bg-zinc-500'

@@ -3,25 +3,19 @@ import { PrismaClient } from '@prisma/client';
 const prisma = new PrismaClient();
 
 async function main() {
-  const adminEmail = 'admin@gmail.com';
-  const adminPassword = 'admin123';
+  const adminEmail = 'classrep@gmail.com';
+  const adminPassword = 'saran@2007';
 
-  // Check if admin already exists
-  const existingAdmin = await prisma.admin.findUnique({
-    where: { email: adminEmail }
+  // Delete all existing admins to maintain database cleanliness
+  await prisma.admin.deleteMany();
+  
+  await prisma.admin.create({
+    data: {
+      email: adminEmail,
+      password: adminPassword,
+    }
   });
-
-  if (!existingAdmin) {
-    await prisma.admin.create({
-      data: {
-        email: adminEmail,
-        password: adminPassword, // In a real app, hash this. Kept plain for simplicity per requirements.
-      }
-    });
-    console.log('Admin account created successfully.');
-  } else {
-    console.log('Admin account already exists.');
-  }
+  console.log('Admin account created successfully.');
 }
 
 main()

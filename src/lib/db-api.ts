@@ -7,6 +7,9 @@ export function normalizeDate(dateInput: Date | string | number): Date {
   return d;
 }
 
+// Fixed baseline start date for attendance calculation (13/07/2026)
+export const ATTENDANCE_START_DATE = normalizeDate('2026-07-13');
+
 // Subject mappings (fixed 5 subjects corresponding to period 1-5)
 export const SUBJECTS = {
   1: 'Java',
@@ -107,20 +110,43 @@ export async function logSentEmail(data: {
 }
 
 export async function calculateOverallAttendance(studentId: number) {
+  // Query attendance ONLY for this specific student from 13/07/2026 onwards
   const attendances = await prisma.attendance.findMany({
-    where: { studentId },
+    where: { 
+      studentId,
+      date: {
+        gte: ATTENDANCE_START_DATE,
+      },
+    },
   });
 
   if (attendances.length === 0) {
-    return { percentage: 100.0, attended: 0, total: 0 };
+    return { percentage: 100.0, attended: 0, total: 0, absent: 0, daysPresent: 0, daysAbsent: 0, totalDays: 0 };
   }
 
   const attendedStatuses = ['Present', 'Late', 'On Duty (OD)', 'Medical Leave (ML)'];
-  const attended = attendances.filter((a) => attendedStatuses.includes(a.status)).length;
-  const total = attendances.length;
-  const percentage = Math.round((attended / total) * 1000) / 10; // 1 decimal place e.g. 74.5
+  
+  // Total Days Present for THIS individual student
+  const daysPresent = attendances.filter((a) => attendedStatuses.includes(a.status)).length;
+  
+  // Total Days Recorded for THIS individual student
+  const totalDays = attendances.length;
+  
+  // Total Days Absent for THIS individual student
+  const daysAbsent = totalDays - daysPresent;
+  
+  // Formula: (Student's Total Present Days / Total Recorded Days) * 100
+  const percentage = Math.round((daysPresent / totalDays) * 1000) / 10;
 
-  return { percentage, attended, total };
+  return {
+    percentage,
+    attended: daysPresent,
+    total: totalDays,
+    absent: daysAbsent,
+    daysPresent,
+    daysAbsent,
+    totalDays,
+  };
 }
 
 // ==========================================
@@ -131,6 +157,7 @@ export async function addStudent(data: {
   registerNumber: string;
   studentName: string;
   email: string;
+  password?: string;
   department: string;
   year: string;
   section: string;
@@ -140,6 +167,7 @@ export async function addStudent(data: {
       registerNumber: data.registerNumber.trim(),
       studentName: data.studentName.trim(),
       email: data.email.trim(),
+      password: data.password || "",
       department: data.department.trim(),
       year: data.year.trim(),
       section: data.section.trim(),
@@ -153,21 +181,28 @@ export async function editStudent(
     registerNumber: string;
     studentName: string;
     email: string;
+    password?: string;
     department: string;
     year: string;
     section: string;
   }
 ) {
+  const updateData: any = {
+    registerNumber: data.registerNumber.trim(),
+    studentName: data.studentName.trim(),
+    email: data.email.trim(),
+    department: data.department.trim(),
+    year: data.year.trim(),
+    section: data.section.trim(),
+  };
+
+  if (data.password) {
+    updateData.password = data.password;
+  }
+
   return prisma.student.update({
     where: { id },
-    data: {
-      registerNumber: data.registerNumber.trim(),
-      studentName: data.studentName.trim(),
-      email: data.email.trim(),
-      department: data.department.trim(),
-      year: data.year.trim(),
-      section: data.section.trim(),
-    },
+    data: updateData,
   });
 }
 
@@ -221,10 +256,9 @@ export async function saveAttendance(
   // Never create duplicate attendance. (Upsert using unique index)
   return prisma.attendance.upsert({
     where: {
-      studentId_date_period: {
+      studentId_date: {
         studentId,
         date: normalizedDate,
-        period,
       },
     },
     update: {
@@ -279,5 +313,45 @@ export async function getStudentAttendanceHistory(studentId: number) {
     orderBy: {
       date: 'desc',
     },
+  });
+}
+
+// ==========================================
+// TEACHERS API
+// ==========================================
+
+export async function addTeacher(data: {
+  name: string;
+  email: string;
+  password: string;
+  department?: string;
+}) {
+  return prisma.teacher.create({
+    data: {
+      name: data.name.trim(),
+      email: data.email.trim().toLowerCase(),
+      password: data.password,
+      department: (data.department || 'CSE').trim(),
+    },
+  });
+}
+
+export async function getAllTeachers() {
+  return prisma.teacher.findMany({
+    orderBy: {
+      createdAt: 'desc',
+    },
+  });
+}
+
+export async function deleteTeacher(id: number) {
+  return prisma.teacher.delete({
+    where: { id },
+  });
+}
+
+export async function findTeacherByEmail(email: string) {
+  return prisma.teacher.findUnique({
+    where: { email: email.trim().toLowerCase() },
   });
 }

@@ -7,6 +7,7 @@ import {
   editStudentAction,
   deleteStudentAction,
   addBulkStudentsAction,
+  checkUserRoleAction,
 } from '@/app/actions';
 import {
   Plus,
@@ -19,6 +20,10 @@ import {
   X,
   Users,
   Upload,
+  ChevronUp,
+  ChevronDown,
+  Eye,
+  EyeOff,
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
 
@@ -37,6 +42,8 @@ export default function StudentsPage() {
   const [students, setStudents] = useState<Student[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [loading, setLoading] = useState(true);
+  const [isAdmin, setIsAdmin] = useState(false);
+  const [isTeacher, setIsTeacher] = useState(false);
   
   // Modal states
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -48,9 +55,17 @@ export default function StudentsPage() {
   const [registerNumber, setRegisterNumber] = useState('');
   const [studentName, setStudentName] = useState('');
   const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [showPasswordModal, setShowPasswordModal] = useState(false);
   const [department, setDepartment] = useState('');
   const [year, setYear] = useState('');
   const [section, setSection] = useState('');
+
+  // Sorting & Pagination States
+  const [sortField, setSortField] = useState<'registerNumber' | 'studentName' | 'department' | 'percentage'>('registerNumber');
+  const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc');
+  const [currentPage, setCurrentPage] = useState(1);
+  const [itemsPerPage, setItemsPerPage] = useState(10);
 
   // Delete Confirm state
   const [deleteConfirmId, setDeleteConfirmId] = useState<number | null>(null);
@@ -58,6 +73,10 @@ export default function StudentsPage() {
   const fetchStudents = async () => {
     setLoading(true);
     try {
+      const roleInfo = await checkUserRoleAction();
+      setIsAdmin(roleInfo.isAdmin);
+      setIsTeacher(roleInfo.isTeacher);
+
       const data = await getAllStudentsWithStats();
       setStudents(data);
     } catch (error) {
@@ -76,6 +95,8 @@ export default function StudentsPage() {
     setRegisterNumber('');
     setStudentName('');
     setEmail('');
+    setPassword('');
+    setShowPasswordModal(false);
     setDepartment('');
     setYear('');
     setSection('');
@@ -88,6 +109,8 @@ export default function StudentsPage() {
     setRegisterNumber(student.registerNumber);
     setStudentName(student.studentName);
     setEmail(student.email || '');
+    setPassword('');
+    setShowPasswordModal(false);
     setDepartment(student.department);
     setYear(student.year);
     setSection(student.section);
@@ -104,6 +127,7 @@ export default function StudentsPage() {
       registerNumber,
       studentName,
       email,
+      password,
       department,
       year,
       section,
@@ -156,9 +180,10 @@ export default function StudentsPage() {
       const json = XLSX.utils.sheet_to_json(worksheet) as any[];
 
       const studentsList = json.map(row => ({
-        registerNumber: String(row['Register Number'] || row['registerNumber'] || '').trim(),
+        registerNumber: String(row['Roll Number'] || row['rollNumber'] || row['Register Number'] || row['registerNumber'] || '').trim(),
         studentName: String(row['Student Name'] || row['studentName'] || '').trim(),
         email: String(row['Email'] || row['email'] || '').trim(),
+        password: String(row['Password'] || row['password'] || '').trim(),
         department: String(row['Department'] || row['department'] || '').trim(),
         year: String(row['Year'] || row['year'] || '').trim(),
         section: String(row['Section'] || row['section'] || '').trim(),
@@ -173,7 +198,7 @@ export default function StudentsPage() {
           alert(result.error || 'Bulk upload failed.');
         }
       } else {
-        alert('No valid student data found in the file. Make sure column headers are correct (Register Number, Student Name, Email, Department, Year, Section).');
+        alert('No valid student data found in the file. Make sure column headers are correct (Roll Number, Student Name, Email, Department, Year, Section).');
       }
     } catch (err) {
       console.error(err);
@@ -196,6 +221,45 @@ export default function StudentsPage() {
     );
   });
 
+  // Client side sorting
+  const sortedStudents = [...filteredStudents].sort((a, b) => {
+    let valA: any = a[sortField];
+    let valB: any = b[sortField];
+    
+    if (sortField === 'percentage') {
+      valA = a.percentage ?? 0;
+      valB = b.percentage ?? 0;
+    } else {
+      valA = String(valA || '').toLowerCase();
+      valB = String(valB || '').toLowerCase();
+    }
+    
+    if (valA < valB) return sortDirection === 'asc' ? -1 : 1;
+    if (valA > valB) return sortDirection === 'asc' ? 1 : -1;
+    return 0;
+  });
+
+  // Reset page to 1 when search or sorting changes
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchQuery, sortField, sortDirection]);
+
+  // Client side pagination
+  const totalPages = Math.max(1, Math.ceil(sortedStudents.length / itemsPerPage));
+  const paginatedStudents = sortedStudents.slice(
+    (currentPage - 1) * itemsPerPage,
+    currentPage * itemsPerPage
+  );
+
+  const handleSort = (field: 'registerNumber' | 'studentName' | 'department' | 'percentage') => {
+    if (sortField === field) {
+      setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc');
+    } else {
+      setSortField(field);
+      setSortDirection('asc');
+    }
+  };
+
   return (
     <div className="space-y-6 max-w-7xl mx-auto">
       {/* Search and Action Bar */}
@@ -207,7 +271,7 @@ export default function StudentsPage() {
           </div>
           <input
             type="text"
-            placeholder="Search students by register no, name, department..."
+            placeholder="Search students by roll number, name, department..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             className="block w-full pl-9 pr-4 py-2.5 bg-slate-900/50 border border-slate-700/50 rounded-xl text-slate-100 placeholder-slate-500 focus:outline-none focus:ring-1 focus:ring-indigo-500 text-sm"
@@ -215,20 +279,22 @@ export default function StudentsPage() {
         </div>
 
         {/* Add button */}
-        <div className="flex gap-3">
-          <label className="flex items-center justify-center gap-2 px-4 py-2.5 bg-slate-800 hover:bg-slate-700 text-slate-200 font-medium rounded-xl shadow-lg transition-all text-sm cursor-pointer border border-slate-700">
-            <Upload className="w-4 h-4" />
-            <span className="hidden sm:inline">Import CSV</span>
-            <input type="file" accept=".csv, .xlsx, .xls" className="hidden" onChange={handleFileUpload} />
-          </label>
-          <button
-            onClick={openAddModal}
-            className="flex items-center justify-center gap-2 px-5 py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white font-medium rounded-xl shadow-lg shadow-indigo-600/10 transition-all text-sm cursor-pointer"
-          >
-            <Plus className="w-4.5 h-4.5" />
-            <span>Add Student</span>
-          </button>
-        </div>
+        {!isTeacher && (
+          <div className="flex gap-3">
+            <label className="flex items-center justify-center gap-2 px-4 py-2.5 bg-slate-800 hover:bg-slate-700 text-slate-200 font-medium rounded-xl shadow-lg transition-all text-sm cursor-pointer border border-slate-700">
+              <Upload className="w-4 h-4" />
+              <span className="hidden sm:inline">Import CSV</span>
+              <input type="file" accept=".csv, .xlsx, .xls" className="hidden" onChange={handleFileUpload} />
+            </label>
+            <button
+              onClick={openAddModal}
+              className="flex items-center justify-center gap-2 px-5 py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white font-medium rounded-xl shadow-lg shadow-indigo-600/10 transition-all text-sm cursor-pointer"
+            >
+              <Plus className="w-4.5 h-4.5" />
+              <span>Add Student</span>
+            </button>
+          </div>
+        )}
       </div>
 
       {/* Main Students List Workspace */}
@@ -237,7 +303,7 @@ export default function StudentsPage() {
           <div className="flex items-center justify-center py-20">
             <Loader2 className="w-8 h-8 text-indigo-500 animate-spin" />
           </div>
-        ) : filteredStudents.length === 0 ? (
+        ) : sortedStudents.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-20 px-4 text-center">
             <Users className="w-12 h-12 text-slate-600 mb-4" />
             <h3 className="text-lg font-semibold text-slate-300">No students found</h3>
@@ -246,69 +312,170 @@ export default function StudentsPage() {
             </p>
           </div>
         ) : (
-          <div className="overflow-x-auto custom-scrollbar">
-            <table className="w-full text-left border-collapse text-sm">
-              <thead>
-                <tr className="bg-slate-950/40 border-b border-slate-800 text-xs font-bold uppercase tracking-wider text-slate-400">
-                  <th className="px-6 py-4">Register Number</th>
-                  <th className="px-6 py-4">Student Name</th>
-                  <th className="px-6 py-4">Email</th>
-                  <th className="px-6 py-4">Department</th>
-                  <th className="px-6 py-4">Year/Sec</th>
-                  <th className="px-6 py-4">Attendance</th>
-                  <th className="px-6 py-4 text-right">Actions</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-800/50">
-                {filteredStudents.map((student) => (
-                  <tr
-                    key={student.id}
-                    className="hover:bg-slate-800/20 transition-colors"
-                  >
-                    <td className="px-6 py-4 font-mono text-slate-200">
-                      {student.registerNumber}
-                    </td>
-                    <td className="px-6 py-4 font-medium text-slate-100">
-                      {student.studentName}
-                    </td>
-                    <td className="px-6 py-4 text-slate-400 text-xs">{student.email || '-'}</td>
-                    <td className="px-6 py-4 text-slate-400">{student.department}</td>
-                    <td className="px-6 py-4 text-slate-400">{student.year} - {student.section}</td>
-                    <td className="px-6 py-4">
-                      {student.percentage !== undefined ? (
-                        <span className={`px-2.5 py-1 rounded-full text-xs font-semibold ${
-                          student.percentage >= 75 ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20' :
-                          student.percentage >= 65 ? 'bg-yellow-500/10 text-yellow-400 border border-yellow-500/20' :
-                          'bg-red-500/10 text-red-400 border border-red-500/20'
-                        }`}>
-                          {student.percentage}%
-                        </span>
-                      ) : (
-                        <span className="text-slate-500">-</span>
-                      )}
-                    </td>
-                    <td className="px-6 py-4 text-right">
-                      <div className="flex items-center justify-end gap-3">
-                        <button
-                          onClick={() => openEditModal(student)}
-                          className="p-2 text-slate-400 hover:text-indigo-400 rounded-lg hover:bg-indigo-500/10 transition-all cursor-pointer"
-                          title="Edit Student"
-                        >
-                          <Edit2 className="w-4.5 h-4.5" />
-                        </button>
-                        <button
-                          onClick={() => setDeleteConfirmId(student.id)}
-                          className="p-2 text-slate-400 hover:text-red-400 rounded-lg hover:bg-red-500/10 transition-all cursor-pointer"
-                          title="Delete Student"
-                        >
-                          <Trash2 className="w-4.5 h-4.5" />
-                        </button>
+          <div>
+            <div className="overflow-x-auto custom-scrollbar">
+              <table className="w-full text-left border-collapse text-sm">
+                <thead>
+                  <tr className="bg-slate-950/40 border-b border-slate-800 text-xs font-bold uppercase tracking-wider text-slate-400">
+                    <th
+                      className="px-6 py-4 cursor-pointer hover:text-slate-200 select-none transition-colors"
+                      onClick={() => handleSort('registerNumber')}
+                    >
+                      <div className="flex items-center gap-1.5">
+                        <span>Roll Number</span>
+                        {sortField === 'registerNumber' && (
+                          sortDirection === 'asc' ? <ChevronUp className="w-4 h-4 text-indigo-400 shrink-0" /> : <ChevronDown className="w-4 h-4 text-indigo-400 shrink-0" />
+                        )}
                       </div>
-                    </td>
+                    </th>
+                    <th
+                      className="px-6 py-4 cursor-pointer hover:text-slate-200 select-none transition-colors"
+                      onClick={() => handleSort('studentName')}
+                    >
+                      <div className="flex items-center gap-1.5">
+                        <span>Student Name</span>
+                        {sortField === 'studentName' && (
+                          sortDirection === 'asc' ? <ChevronUp className="w-4 h-4 text-indigo-400 shrink-0" /> : <ChevronDown className="w-4 h-4 text-indigo-400 shrink-0" />
+                        )}
+                      </div>
+                    </th>
+                    <th className="px-6 py-4">Email</th>
+                    <th
+                      className="px-6 py-4 cursor-pointer hover:text-slate-200 select-none transition-colors"
+                      onClick={() => handleSort('department')}
+                    >
+                      <div className="flex items-center gap-1.5">
+                        <span>Department</span>
+                        {sortField === 'department' && (
+                          sortDirection === 'asc' ? <ChevronUp className="w-4 h-4 text-indigo-400 shrink-0" /> : <ChevronDown className="w-4 h-4 text-indigo-400 shrink-0" />
+                        )}
+                      </div>
+                    </th>
+                    <th className="px-6 py-4">Year/Sec</th>
+                    <th
+                      className="px-6 py-4 cursor-pointer hover:text-slate-200 select-none transition-colors"
+                      onClick={() => handleSort('percentage')}
+                    >
+                      <div className="flex items-center gap-1.5">
+                        <span>Attendance</span>
+                        {sortField === 'percentage' && (
+                          sortDirection === 'asc' ? <ChevronUp className="w-4 h-4 text-indigo-400 shrink-0" /> : <ChevronDown className="w-4 h-4 text-indigo-400 shrink-0" />
+                        )}
+                      </div>
+                    </th>
+                    {!isTeacher && <th className="px-6 py-4 text-right">Actions</th>}
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody className="divide-y divide-slate-800/50">
+                  {paginatedStudents.map((student) => (
+                    <tr
+                      key={student.id}
+                      className="hover:bg-slate-800/20 transition-colors"
+                    >
+                      <td className="px-6 py-4 font-mono text-slate-200">
+                        {student.registerNumber}
+                      </td>
+                      <td className="px-6 py-4 font-medium text-slate-100">
+                        {student.studentName}
+                      </td>
+                      <td className="px-6 py-4 text-slate-400 text-xs">{student.email || '-'}</td>
+                      <td className="px-6 py-4 text-slate-400">{student.department}</td>
+                      <td className="px-6 py-4 text-slate-400">{student.year} - {student.section}</td>
+                      <td className="px-6 py-4">
+                        {student.percentage !== undefined ? (
+                          <span className={`px-2.5 py-1 rounded-full text-xs font-semibold ${
+                            student.percentage >= 75 ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20' :
+                            student.percentage >= 65 ? 'bg-yellow-500/10 text-yellow-400 border border-yellow-500/20' :
+                            'bg-red-500/10 text-red-400 border border-red-500/20'
+                          }`}>
+                            {student.percentage}%
+                          </span>
+                        ) : (
+                          <span className="text-slate-500">-</span>
+                        )}
+                      </td>
+                      {!isTeacher && (
+                        <td className="px-6 py-4 text-right">
+                          <div className="flex items-center justify-end gap-3">
+                            <button
+                              onClick={() => openEditModal(student)}
+                              className="p-2 text-slate-400 hover:text-indigo-400 rounded-lg hover:bg-indigo-500/10 transition-all cursor-pointer"
+                              title="Edit Student"
+                            >
+                              <Edit2 className="w-4.5 h-4.5" />
+                            </button>
+                            <button
+                              onClick={() => setDeleteConfirmId(student.id)}
+                              className="p-2 text-slate-400 hover:text-red-400 rounded-lg hover:bg-red-500/10 transition-all cursor-pointer"
+                              title="Delete Student"
+                            >
+                              <Trash2 className="w-4.5 h-4.5" />
+                            </button>
+                          </div>
+                        </td>
+                      )}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+
+            {/* Pagination Controls Footer */}
+            <div className="px-6 py-4 bg-slate-950/40 border-t border-slate-800 flex flex-col sm:flex-row gap-4 items-center justify-between">
+              <div className="flex items-center gap-3">
+                <span className="text-xs text-slate-400">Show</span>
+                <select
+                  value={itemsPerPage}
+                  onChange={(e) => {
+                    setItemsPerPage(Number(e.target.value));
+                    setCurrentPage(1);
+                  }}
+                  className="px-2.5 py-1 bg-slate-900 border border-slate-700/50 rounded-lg text-slate-200 text-xs focus:outline-none focus:ring-1 focus:ring-indigo-500 cursor-pointer"
+                >
+                  {[5, 10, 25, 50].map((size) => (
+                    <option key={size} value={size}>
+                      {size} entries
+                    </option>
+                  ))}
+                </select>
+                <span className="text-xs text-slate-500 font-medium">
+                  Showing {sortedStudents.length === 0 ? 0 : (currentPage - 1) * itemsPerPage + 1} to{' '}
+                  {Math.min(currentPage * itemsPerPage, sortedStudents.length)} of {sortedStudents.length} students
+                </span>
+              </div>
+
+              {totalPages > 1 && (
+                <div className="flex items-center gap-1">
+                  <button
+                    disabled={currentPage === 1}
+                    onClick={() => setCurrentPage(currentPage - 1)}
+                    className="px-3 py-1.5 bg-slate-900 border border-slate-700/50 hover:bg-slate-800 disabled:opacity-50 disabled:hover:bg-slate-900 text-slate-300 rounded-xl text-xs font-semibold transition-colors cursor-pointer"
+                  >
+                    Previous
+                  </button>
+                  {Array.from({ length: totalPages }, (_, i) => i + 1).map((pg) => (
+                    <button
+                      key={pg}
+                      onClick={() => setCurrentPage(pg)}
+                      className={`w-8 h-8 flex items-center justify-center rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                        currentPage === pg
+                          ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-600/10'
+                          : 'bg-slate-900/50 text-slate-400 hover:text-slate-200 border border-slate-800'
+                      }`}
+                    >
+                      {pg}
+                    </button>
+                  ))}
+                  <button
+                    disabled={currentPage === totalPages}
+                    onClick={() => setCurrentPage(currentPage + 1)}
+                    className="px-3 py-1.5 bg-slate-900 border border-slate-700/50 hover:bg-slate-800 disabled:opacity-50 disabled:hover:bg-slate-900 text-slate-300 rounded-xl text-xs font-semibold transition-colors cursor-pointer"
+                  >
+                    Next
+                  </button>
+                </div>
+              )}
+            </div>
           </div>
         )}
       </div>
@@ -343,7 +510,7 @@ export default function StudentsPage() {
             <form onSubmit={handleModalSubmit} className="space-y-4">
               <div>
                 <label className="block text-xs font-semibold uppercase tracking-wider text-slate-400 mb-1.5">
-                  Register Number *
+                  Roll Number *
                 </label>
                 <input
                   type="text"
@@ -371,15 +538,40 @@ export default function StudentsPage() {
 
               <div>
                 <label className="block text-xs font-semibold uppercase tracking-wider text-slate-400 mb-1.5">
-                  Email
+                  Email *
                 </label>
                 <input
                   type="email"
+                  required
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   placeholder="john@example.com"
                   className="block w-full px-3.5 py-2.5 bg-slate-950/50 border border-slate-700/50 rounded-xl text-slate-200 focus:outline-none focus:ring-1 focus:ring-indigo-500 text-sm"
                 />
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold uppercase tracking-wider text-slate-400 mb-1.5">
+                  Password {editingStudent ? '(Leave blank to keep current)' : '*'}
+                </label>
+                <div className="relative">
+                  <input
+                    type={showPasswordModal ? 'text' : 'password'}
+                    required={!editingStudent}
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    placeholder={editingStudent ? "••••••••" : "Enter password"}
+                    className="block w-full pl-3.5 pr-11 py-2.5 bg-slate-950/50 border border-slate-700/50 rounded-xl text-slate-200 focus:outline-none focus:ring-1 focus:ring-indigo-500 text-sm"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowPasswordModal(!showPasswordModal)}
+                    className="absolute inset-y-0 right-0 pr-3.5 flex items-center text-slate-400 hover:text-slate-200 cursor-pointer"
+                    title={showPasswordModal ? "Hide password" : "Show password"}
+                  >
+                    {showPasswordModal ? <EyeOff className="w-4.5 h-4.5" /> : <Eye className="w-4.5 h-4.5" />}
+                  </button>
+                </div>
               </div>
 
               <div className="grid grid-cols-3 gap-4">

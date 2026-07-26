@@ -1,36 +1,66 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# CR Attendance Manager
 
-## Getting Started
+A modern, responsive, and robust **Student Admission & Attendance Management System** built with **Next.js 16 (App Router)**, **Prisma ORM**, **Neon PostgreSQL**, and **Tailwind CSS**.
 
-First, run the development server:
+---
+
+## Features
+- **General Daily Attendance**: 1 attendance record per student per day with statuses (*Present, Absent, Late, On Duty, Medical Leave, Long Absent*).
+- **Strict Individual Attendance %**: Calculated per student from **13/07/2026** onwards: `(Present Days / Total Days) * 100`.
+- **Student Portal**: Student login via password or Google Sign-In with strict registered email verification.
+- **Admin Dashboard**: Live absentee summary, roll number tracking, password show/hide toggle, and instant attendance updates.
+- **Neon PostgreSQL**: Powered by cloud PostgreSQL database with complete data integrity.
+- **Excel & PDF Exports**: Downloadable daily and date-range attendance reports.
+
+---
+
+## Local Setup & Development
 
 ```bash
+# 1. Install dependencies
+npm install
+
+# 2. Generate Prisma Client
+npx prisma generate
+
+# 3. Start local development server
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+---
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## Deploying to GitHub & Vercel
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+### Step 1: Push Project to GitHub
 
-## Learn More
+Execute the following commands in your shell:
 
-To learn more about Next.js, take a look at the following resources:
+```bash
+# Initialize git (if not already initialized)
+git init
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+# Stage all files (.env and SQLite backup files are excluded automatically)
+git add .
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+# Create initial commit
+git commit -m "Complete CR Attendance Manager with Neon PostgreSQL & Next.js"
 
-## Deploy on Vercel
+# Push to your GitHub repository
+git branch -M main
+git remote add origin https://github.com/YOUR_USERNAME/CR-Attendance.git
+git push -u origin main
+```
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+---
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+### Step 2: Deploy to Vercel
+
+1. Log in to [Vercel](https://vercel.com/) and click **"Add New..."** $\rightarrow$ **"Project"**.
+2. Import your **`CR-Attendance`** GitHub repository.
+3. In **Environment Variables**, add:
+
+   | Key | Value |
+   | :--- | :--- |
+   | `DATABASE_URL` | `postgresql://<USER>:<PASSWORD>@<HOST>/neondb?sslmode=require` |
+
+4. Click **Deploy**. Vercel will automatically build the Next.js application and connect both `/login` and `/student/login` to your Neon PostgreSQL database.
