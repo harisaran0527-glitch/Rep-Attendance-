@@ -22,6 +22,7 @@ import {
   Info
 } from 'lucide-react';
 import { studentLogoutAction } from '../../actions';
+import { isHoliday, isSundayDate } from '@/lib/holidays';
 
 interface StudentProps {
   id: number;
@@ -196,7 +197,13 @@ export default function StudentDashboardClient({
       let bgClass = 'bg-slate-900/40 hover:bg-slate-800/50 text-slate-400 border-slate-800/60';
       let titleText = 'No class marked';
 
-      if (dayRecords.length > 0) {
+      if (isHoliday(dateStr)) {
+        bgClass = 'bg-amber-950/25 text-amber-300 border-amber-500/30 hover:bg-amber-900/30';
+        titleText = 'College Leave / Holiday';
+      } else if (isSundayDate(dateStr)) {
+        bgClass = 'bg-slate-950/40 text-slate-500 border-slate-800/40 opacity-60';
+        titleText = 'Sunday (Holiday)';
+      } else if (dayRecords.length > 0) {
         const hasAbsent = dayRecords.some(r => r.status === 'Absent' || r.status === 'Long Absent');
         const hasML = dayRecords.some(r => r.status === 'Medical Leave (ML)');
         const hasOD = dayRecords.some(r => r.status === 'On Duty (OD)');

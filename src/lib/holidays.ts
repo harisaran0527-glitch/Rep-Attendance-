@@ -1,6 +1,7 @@
 // College Holidays Configuration List
 // Add any specific college holiday dates in 'YYYY-MM-DD' format here.
 export const COLLEGE_HOLIDAYS = [
+  '2026-07-18', // College Leave
   '2026-08-15', // Independence Day
   '2026-10-02', // Gandhi Jayanti
   // Add other holidays here
