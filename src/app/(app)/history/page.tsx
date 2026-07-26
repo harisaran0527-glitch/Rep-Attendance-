@@ -4,19 +4,23 @@ import { useState, useEffect } from 'react';
 import {
   getAllStudentsWithStats,
   getAttendanceForDateAction,
-  saveBulkAttendanceAction,
+  getAllAttendanceSessionsAction,
 } from '@/app/actions';
-import { ATTENDANCE_STATUSES, AttendanceStatus } from '@/lib/db-api';
+import { AttendanceStatus } from '@/lib/db-api';
 import {
   Calendar,
   Clock,
   BookOpen,
   Loader2,
   CheckCircle2,
-  AlertCircle,
   Search,
   History,
-  Check,
+  Eye,
+  Filter,
+  User,
+  ShieldCheck,
+  Info,
+  X,
 } from 'lucide-react';
 
 interface Student {
@@ -29,363 +33,419 @@ interface Student {
   percentage?: number;
 }
 
+interface AttendanceSession {
+  id: string;
+  date: string;
+  subject: string;
+  period: number;
+  totalStudents: number;
+  present: number;
+  absent: number;
+  od: number;
+  ml: number;
+  la: number;
+  savedAt: string;
+  savedBy: string;
+}
+
 interface AttendanceMap {
   [studentId: number]: AttendanceStatus | 'Unmarked';
 }
 
 export default function HistoryPage() {
+  const [sessions, setSessions] = useState<AttendanceSession[]>([]);
   const [students, setStudents] = useState<Student[]>([]);
-  const today = new Date();
-  const [day, setDay] = useState<number>(today.getDate());
-  const [month, setMonth] = useState<number>(today.getMonth() + 1);
-  const [year, setYear] = useState<number>(today.getFullYear());
-  const [date, setDate] = useState<string>(today.toISOString().split('T')[0]);
-  
-  const [attendance, setAttendance] = useState<AttendanceMap>({});
-  
   const [loading, setLoading] = useState(true);
+
+  // Filters & Search
   const [searchQuery, setSearchQuery] = useState('');
-  const [savingState, setSavingState] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
+  const [selectedDateFilter, setSelectedDateFilter] = useState('');
+  const [statusFilter, setStatusFilter] = useState<string>('ALL');
 
-  // Get number of days in selected month and year
-  const getDaysInMonth = (y: number, m: number) => {
-    return new Date(y, m, 0).getDate();
-  };
+  // Modal State for "View Details"
+  const [selectedSession, setSelectedSession] = useState<AttendanceSession | null>(null);
+  const [sessionAttendance, setSessionAttendance] = useState<AttendanceMap>({});
+  const [loadingDetails, setLoadingDetails] = useState(false);
+  const [detailSearchQuery, setDetailSearchQuery] = useState('');
+  const [detailStatusFilter, setDetailStatusFilter] = useState<string>('ALL');
 
-  const daysLimit = getDaysInMonth(year, month);
-
-  // Keep selected day within valid limits for selected month/year
-  useEffect(() => {
-    const limit = getDaysInMonth(year, month);
-    if (day > limit) {
-      setDay(limit);
-    }
-  }, [month, year, day]);
-
-  // Update full date whenever day/month/year changes
-  useEffect(() => {
-    const d = new Date(year, month - 1, day);
-    const offset = d.getTimezoneOffset();
-    const localDate = new Date(d.getTime() - (offset * 60 * 1000));
-    setDate(localDate.toISOString().split('T')[0]);
-  }, [day, month, year]);
-
-  // Load students and active attendance for selected date
-  const loadData = async () => {
+  // Load all sessions and base students
+  const loadSessionsData = async () => {
     setLoading(true);
-    setSavingState('idle');
     try {
       const studentsData = await getAllStudentsWithStats();
       setStudents(studentsData);
 
-      const attResult = await getAttendanceForDateAction(date);
-      if (attResult.success && attResult.data) {
-        const newMap: AttendanceMap = {};
-        studentsData.forEach((student: Student) => {
-          newMap[student.id] = attResult.data![student.id] || 'Unmarked';
-        });
-        setAttendance(newMap);
-      } else {
-        const newMap: AttendanceMap = {};
-        studentsData.forEach((student: Student) => {
-          newMap[student.id] = 'Unmarked';
-        });
-        setAttendance(newMap);
+      const res = await getAllAttendanceSessionsAction();
+      if (res.success && res.data) {
+        setSessions(res.data);
       }
     } catch (error) {
-      console.error('Failed to load history data:', error);
+      console.error('Failed to load attendance history sessions:', error);
     } finally {
       setLoading(false);
     }
   };
 
   useEffect(() => {
-    loadData();
-  }, [date]);
+    loadSessionsData();
+  }, []);
 
-  // Handle live edit and save
-  const handleStatusChange = async (studentId: number, status: AttendanceStatus) => {
-    const prevStatus = attendance[studentId];
-    const newAttendance = { ...attendance, [studentId]: status };
-    setAttendance(newAttendance);
-    setSavingState('saving');
-
+  // Open "View Details" Modal
+  const handleOpenDetails = async (sessionItem: AttendanceSession) => {
+    setSelectedSession(sessionItem);
+    setLoadingDetails(true);
+    setDetailSearchQuery('');
+    setDetailStatusFilter('ALL');
     try {
-      const result = await saveBulkAttendanceAction(date, [
-        { studentId, status },
-      ]);
-      if (result.success) {
-        setSavingState('saved');
-        setTimeout(() => setSavingState((s) => (s === 'saved' ? 'idle' : s)), 2000);
-      } else {
-        setSavingState('error');
-        setAttendance({ ...attendance, [studentId]: prevStatus });
+      const attResult = await getAttendanceForDateAction(sessionItem.date);
+      if (attResult.success && attResult.data) {
+        const newMap: AttendanceMap = {};
+        students.forEach((student) => {
+          newMap[student.id] = attResult.data![student.id] || 'Unmarked';
+        });
+        setSessionAttendance(newMap);
       }
     } catch (err) {
-      setSavingState('error');
-      setAttendance({ ...attendance, [studentId]: prevStatus });
+      console.error('Failed to load session details:', err);
+    } finally {
+      setLoadingDetails(false);
     }
   };
 
-  const filteredStudents = students.filter((s) => {
-    const q = searchQuery.toLowerCase();
-    return (
-      s.registerNumber.toLowerCase().includes(q) ||
-      s.studentName.toLowerCase().includes(q)
-    );
+  // Filter sessions
+  const filteredSessions = sessions.filter((s) => {
+    const matchesDate = !selectedDateFilter || s.date === selectedDateFilter;
+    const matchesSearch =
+      !searchQuery ||
+      s.date.includes(searchQuery) ||
+      s.subject.toLowerCase().includes(searchQuery.toLowerCase());
+    return matchesDate && matchesSearch;
   });
 
-  const getStatusStyle = (status: AttendanceStatus, currentStatus: string, activeClass: string) => {
-    const isActive = currentStatus === status;
-    return isActive
-      ? `${activeClass} scale-105 border-transparent text-white font-bold ring-2 ring-offset-2 ring-offset-slate-900 ring-indigo-500/50`
-      : 'bg-slate-900 border-slate-700 text-slate-400 hover:bg-slate-800 hover:text-slate-200';
+  const getStatusBadge = (status: string) => {
+    switch (status) {
+      case 'Present':
+        return (
+          <span className="px-2.5 py-1 rounded-full text-xs font-bold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+            Present
+          </span>
+        );
+      case 'Absent':
+        return (
+          <span className="px-2.5 py-1 rounded-full text-xs font-bold bg-rose-500/10 text-rose-400 border border-rose-500/20">
+            Absent
+          </span>
+        );
+      case 'On Duty (OD)':
+        return (
+          <span className="px-2.5 py-1 rounded-full text-xs font-bold bg-blue-500/10 text-blue-400 border border-blue-500/20">
+            On Duty (OD)
+          </span>
+        );
+      case 'Medical Leave (ML)':
+        return (
+          <span className="px-2.5 py-1 rounded-full text-xs font-bold bg-purple-500/10 text-purple-400 border border-purple-500/20">
+            Medical Leave
+          </span>
+        );
+      case 'Long Absent':
+        return (
+          <span className="px-2.5 py-1 rounded-full text-xs font-bold bg-zinc-500/10 text-zinc-400 border border-zinc-500/20">
+            Long Absent
+          </span>
+        );
+      default:
+        return (
+          <span className="px-2.5 py-1 rounded-full text-xs font-bold bg-slate-800 text-slate-400">
+            {status}
+          </span>
+        );
+    }
   };
 
-  // Stat summary for this date
-  const countStats = {
-    Present: Object.values(attendance).filter((s) => s === 'Present').length,
-    Absent: Object.values(attendance).filter((s) => s === 'Absent').length,
-    'On Duty (OD)': Object.values(attendance).filter((s) => s === 'On Duty (OD)').length,
-    'Medical Leave (ML)': Object.values(attendance).filter((s) => s === 'Medical Leave (ML)').length,
-    'Long Absent': Object.values(attendance).filter((s) => s === 'Long Absent').length,
-    Unmarked: Object.values(attendance).filter((s) => s === 'Unmarked').length,
-  };
+  // Filter student detail modal list
+  const filteredModalStudents = students.filter((student) => {
+    const status = sessionAttendance[student.id] || 'Unmarked';
+    const q = detailSearchQuery.toLowerCase();
+    const matchesQuery =
+      student.studentName.toLowerCase().includes(q) ||
+      student.registerNumber.toLowerCase().includes(q);
+    const matchesStatus = detailStatusFilter === 'ALL' || status === detailStatusFilter;
+
+    return matchesQuery && matchesStatus;
+  });
 
   return (
-    <div className="space-y-6 max-w-7xl mx-auto">
-      {/* Date filter card */}
+    <div className="space-y-6 max-w-7xl mx-auto pb-12">
+      {/* Header and Read-Only Guidance Card */}
       <div className="glass p-6 rounded-2xl flex flex-col lg:flex-row gap-6 justify-between items-start lg:items-center">
         <div className="space-y-1">
-          <h3 className="text-lg font-semibold text-slate-100 flex items-center gap-2">
+          <h3 className="text-lg font-bold text-slate-100 flex items-center gap-2">
             <History className="w-5 h-5 text-indigo-400" />
-            <span>Attendance History Logs</span>
+            <span>Attendance History — View Only</span>
           </h3>
-          <p className="text-xs text-slate-400 flex items-center gap-1.5">
-            View & Edit daily records for date: <strong className="text-indigo-400">{date}</strong>
+          <p className="text-xs text-slate-400">
+            View saved attendance session records, daily breakdowns, and individual student statuses.
           </p>
         </div>
 
-        <div className="flex items-center gap-4 w-full lg:w-auto">
-          {/* Day/Month/Year Pickers */}
-          <div className="flex flex-wrap gap-2 min-w-[280px]">
-            <div className="flex-1">
-              <label className="block text-[10px] uppercase font-bold tracking-wider text-slate-400 mb-1.5">Day</label>
-              <select
-                value={day}
-                onChange={(e) => setDay(Number(e.target.value))}
-                className="w-full px-2 py-2 bg-slate-950/50 border border-slate-700/50 rounded-xl text-slate-200 text-sm focus:outline-none focus:ring-1 focus:ring-indigo-500 cursor-pointer"
-              >
-                {Array.from({ length: daysLimit }, (_, i) => i + 1).map(d => (
-                  <option key={d} value={d}>{d}</option>
-                ))}
-              </select>
-            </div>
-            <div className="flex-1">
-              <label className="block text-[10px] uppercase font-bold tracking-wider text-slate-400 mb-1.5">Month</label>
-              <select
-                value={month}
-                onChange={(e) => setMonth(Number(e.target.value))}
-                className="w-full px-2 py-2 bg-slate-950/50 border border-slate-700/50 rounded-xl text-slate-200 text-sm focus:outline-none focus:ring-1 focus:ring-indigo-500 cursor-pointer"
-              >
-                {Array.from({ length: 12 }, (_, i) => i + 1).map(m => (
-                  <option key={m} value={m}>{m}</option>
-                ))}
-              </select>
-            </div>
-            <div className="flex-1">
-              <label className="block text-[10px] uppercase font-bold tracking-wider text-slate-400 mb-1.5">Year</label>
-              <select
-                value={year}
-                onChange={(e) => setYear(Number(e.target.value))}
-                className="w-full px-2 py-2 bg-slate-950/50 border border-slate-700/50 rounded-xl text-slate-200 text-sm focus:outline-none focus:ring-1 focus:ring-indigo-500 cursor-pointer"
-              >
-                {[2024, 2025, 2026, 2027].map(y => (
-                  <option key={y} value={y}>{y}</option>
-                ))}
-              </select>
-            </div>
-          </div>
+        <div className="flex items-center gap-2 bg-indigo-500/10 border border-indigo-500/20 px-4 py-2 rounded-xl text-xs text-indigo-300 font-medium">
+          <Info className="w-4 h-4 text-indigo-400 shrink-0" />
+          <span>To make corrections, use the Take Attendance page.</span>
         </div>
       </div>
 
-      {/* Summary strip & Auto saving indicator */}
-      <div className="flex flex-col lg:flex-row gap-4 justify-between items-stretch lg:items-center">
-        {/* Autosave message */}
-        <div className="flex items-center gap-2 text-sm">
-          {savingState === 'saving' && (
-            <span className="flex items-center gap-1.5 text-indigo-400 font-medium">
-              <Loader2 className="w-4 h-4 animate-spin" />
-              <span>Autosaving database change...</span>
-            </span>
-          )}
-          {savingState === 'saved' && (
-            <span className="flex items-center gap-1.5 text-emerald-400 font-medium">
-              <CheckCircle2 className="w-4 h-4" />
-              <span>Record updated automatically!</span>
-            </span>
-          )}
-          {savingState === 'error' && (
-            <span className="flex items-center gap-1.5 text-rose-400 font-medium">
-              <AlertCircle className="w-4 h-4" />
-              <span>Update failed. Verify connection.</span>
-            </span>
-          )}
-          {savingState === 'idle' && (
-            <span className="text-slate-400 text-xs">
-              Click any status button to edit. Changes are written to the database automatically.
-            </span>
-          )}
-        </div>
-
-        {/* Attendance stats summary for this date */}
-        <div className="flex flex-wrap items-center gap-3 bg-slate-900/50 border border-slate-800 rounded-2xl px-4 py-2 text-xs">
-          <span className="text-slate-500 font-bold uppercase tracking-wider text-[10px]">
-            Daily Summary ({date}):
-          </span>
-          <span className="text-emerald-400 font-bold">Present: {countStats.Present}</span>
-          <span className="text-rose-400 font-bold">Absent: {countStats.Absent}</span>
-          <span className="text-blue-400 font-medium">OD: {countStats['On Duty (OD)']}</span>
-          <span className="text-purple-400 font-medium">ML: {countStats['Medical Leave (ML)']}</span>
-          <span className="text-slate-400 font-medium">LA: {countStats['Long Absent']}</span>
-          <span className="text-slate-500 font-medium">Unmarked: {countStats.Unmarked}</span>
-        </div>
-      </div>
-
-      {/* Main Student Attendance Grid Workspace */}
-      <div className="glass rounded-2xl border border-slate-800 overflow-hidden shadow-xl">
-        {/* Search */}
-        <div className="p-4 bg-slate-950/20 border-b border-slate-850 flex items-center gap-3">
-          <div className="relative flex-1 max-w-sm">
+      {/* Search & Filter Bar */}
+      <div className="glass p-4 rounded-2xl flex flex-col sm:flex-row gap-4 items-start sm:items-center justify-between">
+        <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 w-full sm:w-auto">
+          {/* Search Input */}
+          <div className="relative w-full sm:w-64">
             <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
               <Search className="h-4 w-4 text-slate-500" />
             </div>
             <input
               type="text"
-              placeholder="Search history by student name or roll..."
+              placeholder="Search history by date or subject..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="block w-full pl-9 pr-4 py-2 bg-slate-900/50 border border-slate-700/50 rounded-xl text-slate-100 placeholder-slate-500 focus:outline-none focus:ring-1 focus:ring-indigo-500 text-xs"
+              className="block w-full pl-9 pr-4 py-2 bg-slate-950/50 border border-slate-700/50 rounded-xl text-slate-100 placeholder-slate-500 focus:outline-none focus:ring-1 focus:ring-indigo-500 text-xs"
             />
           </div>
-          <span className="text-xs text-slate-500 ml-auto font-medium">
-            Showing {filteredStudents.length} records
-          </span>
+
+          {/* Date Picker Filter */}
+          <input
+            type="date"
+            value={selectedDateFilter}
+            onChange={(e) => setSelectedDateFilter(e.target.value)}
+            className="px-3.5 py-2 bg-slate-950/50 border border-slate-700/50 rounded-xl text-slate-200 text-xs focus:outline-none focus:ring-1 focus:ring-indigo-500"
+          />
+
+          {selectedDateFilter && (
+            <button
+              onClick={() => setSelectedDateFilter('')}
+              className="text-xs text-slate-400 hover:text-white underline cursor-pointer"
+            >
+              Clear Date Filter
+            </button>
+          )}
         </div>
 
-        {loading ? (
-          <div className="flex items-center justify-center py-20">
-            <Loader2 className="w-8 h-8 text-indigo-500 animate-spin" />
-          </div>
-        ) : filteredStudents.length === 0 ? (
-          <div className="text-center py-20 px-4 text-slate-500">
-            No history logs match search criteria.
-          </div>
-        ) : (
-          <div className="overflow-x-auto custom-scrollbar">
-            <table className="w-full text-left border-collapse text-sm">
-              <thead>
-                <tr className="bg-slate-950/40 border-b border-slate-800 text-xs font-bold uppercase tracking-wider text-slate-400">
-                  <th className="px-6 py-4 w-1/3">Student Details & Individual %</th>
-                  <th className="px-6 py-4 text-center">Marked Daily Status</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-850">
-                {filteredStudents.map((student) => {
-                  const currentStatus = attendance[student.id] || 'Unmarked';
-                  return (
-                    <tr
-                      key={student.id}
-                      className="hover:bg-slate-800/10 transition-colors"
-                    >
-                      <td className="px-6 py-4">
-                        <div className="font-semibold text-slate-100 flex items-center gap-2">
-                          {student.studentName}
-                          {student.percentage !== undefined && (
-                            <span className={`px-1.5 py-0.5 rounded-md text-[10px] font-bold ${
-                              student.percentage >= 75 ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20' :
-                              student.percentage >= 65 ? 'bg-yellow-500/10 text-yellow-400 border border-yellow-500/20' :
-                              'bg-red-500/10 text-red-400 border border-red-500/20'
-                            }`}>
-                              {student.percentage}%
-                            </span>
-                          )}
-                        </div>
-                        <div className="text-xs text-slate-400 mt-0.5 font-mono">
-                          {student.registerNumber} &bull; {student.department} {student.year} Sec {student.section}
-                        </div>
-                      </td>
-                      <td className="px-6 py-4">
-                        <div className="flex items-center justify-center gap-2 sm:gap-3 flex-wrap">
-                          {/* Present */}
-                          <button
-                            onClick={() => handleStatusChange(student.id, 'Present')}
-                            className={`px-4 py-2 border rounded-xl text-xs font-bold transition-all cursor-pointer ${getStatusStyle(
-                              'Present',
-                              currentStatus,
-                              'bg-emerald-600 hover:bg-emerald-500'
-                            )}`}
-                          >
-                            Present
-                          </button>
-
-                          {/* Absent */}
-                          <button
-                            onClick={() => handleStatusChange(student.id, 'Absent')}
-                            className={`px-4 py-2 border rounded-xl text-xs font-bold transition-all cursor-pointer ${getStatusStyle(
-                              'Absent',
-                              currentStatus,
-                              'bg-rose-600 hover:bg-rose-500'
-                            )}`}
-                          >
-                            Absent
-                          </button>
-
-                          {/* On Duty */}
-                          <button
-                            onClick={() => handleStatusChange(student.id, 'On Duty (OD)')}
-                            className={`px-3 py-2 border rounded-xl text-xs font-bold transition-all cursor-pointer ${getStatusStyle(
-                              'On Duty (OD)',
-                              currentStatus,
-                              'bg-blue-600 hover:bg-blue-500'
-                            )}`}
-                          >
-                            OD
-                          </button>
-
-                          {/* Medical Leave */}
-                          <button
-                            onClick={() => handleStatusChange(student.id, 'Medical Leave (ML)')}
-                            className={`px-3 py-2 border rounded-xl text-xs font-bold transition-all cursor-pointer ${getStatusStyle(
-                              'Medical Leave (ML)',
-                              currentStatus,
-                              'bg-purple-600 hover:bg-purple-500'
-                            )}`}
-                          >
-                            ML
-                          </button>
-
-                          {/* Long Absent */}
-                          <button
-                            onClick={() => handleStatusChange(student.id, 'Long Absent')}
-                            className={`px-3 py-2 border rounded-xl text-xs font-bold transition-all cursor-pointer ${getStatusStyle(
-                              'Long Absent',
-                              currentStatus,
-                              'bg-zinc-600 hover:bg-zinc-500'
-                            )}`}
-                          >
-                            LA
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-        )}
+        <span className="text-xs text-slate-400 font-medium">
+          Showing {filteredSessions.length} saved attendance sessions
+        </span>
       </div>
+
+      {/* Main Sessions Grid */}
+      {loading ? (
+        <div className="flex items-center justify-center py-20">
+          <Loader2 className="w-8 h-8 text-indigo-500 animate-spin" />
+        </div>
+      ) : filteredSessions.length === 0 ? (
+        <div className="glass p-12 rounded-2xl text-center text-slate-500 text-sm">
+          No saved attendance sessions found matching filter. Use Take Attendance page to save attendance for a date.
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          {filteredSessions.map((session) => (
+            <div
+              key={session.id}
+              className="glass p-6 rounded-2xl border border-slate-800 space-y-4 hover:border-slate-700 transition-all flex flex-col justify-between shadow-xl"
+            >
+              <div className="space-y-3">
+                {/* Session Header */}
+                <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+                  <div>
+                    <h4 className="text-base font-bold text-slate-100 flex items-center gap-2">
+                      <Calendar className="w-4 h-4 text-indigo-400" />
+                      <span>{session.date}</span>
+                    </h4>
+                    <p className="text-xs text-slate-400 mt-0.5 font-medium">
+                      {session.subject} &bull; Period {session.period}
+                    </p>
+                  </div>
+                  <span className="px-2.5 py-1 rounded-full text-[10px] font-bold bg-indigo-500/10 text-indigo-300 border border-indigo-500/20">
+                    Saved Session
+                  </span>
+                </div>
+
+                {/* Audit Info */}
+                <div className="text-[11px] text-slate-500 space-y-1 font-mono">
+                  <div className="flex items-center gap-1.5">
+                    <Clock className="w-3.5 h-3.5 text-slate-400" />
+                    <span>Saved Time: {session.savedAt}</span>
+                  </div>
+                  <div className="flex items-center gap-1.5">
+                    <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" />
+                    <span>Saved By: {session.savedBy}</span>
+                  </div>
+                </div>
+
+                {/* Status Count Badges */}
+                <div className="grid grid-cols-3 gap-2 pt-2 text-center text-xs">
+                  <div className="p-2 rounded-xl bg-emerald-500/10 border border-emerald-500/20">
+                    <span className="block text-[10px] text-emerald-400 font-bold uppercase">Present</span>
+                    <span className="text-base font-extrabold text-emerald-300">{session.present}</span>
+                  </div>
+                  <div className="p-2 rounded-xl bg-rose-500/10 border border-rose-500/20">
+                    <span className="block text-[10px] text-rose-400 font-bold uppercase">Absent</span>
+                    <span className="text-base font-extrabold text-rose-300">{session.absent}</span>
+                  </div>
+                  <div className="p-2 rounded-xl bg-blue-500/10 border border-blue-500/20">
+                    <span className="block text-[10px] text-blue-400 font-bold uppercase">OD</span>
+                    <span className="text-base font-extrabold text-blue-300">{session.od}</span>
+                  </div>
+                  <div className="p-2 rounded-xl bg-purple-500/10 border border-purple-500/20">
+                    <span className="block text-[10px] text-purple-400 font-bold uppercase">ML</span>
+                    <span className="text-base font-extrabold text-purple-300">{session.ml}</span>
+                  </div>
+                  <div className="p-2 rounded-xl bg-zinc-500/10 border border-zinc-500/20">
+                    <span className="block text-[10px] text-zinc-400 font-bold uppercase">LA</span>
+                    <span className="text-base font-extrabold text-zinc-300">{session.la}</span>
+                  </div>
+                  <div className="p-2 rounded-xl bg-slate-900 border border-slate-800">
+                    <span className="block text-[10px] text-slate-400 font-bold uppercase">Total</span>
+                    <span className="text-base font-extrabold text-slate-200">{session.totalStudents}</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* View Details Action */}
+              <div className="pt-4 border-t border-slate-800">
+                <button
+                  onClick={() => handleOpenDetails(session)}
+                  className="w-full flex items-center justify-center gap-2 px-4 py-2.5 bg-slate-800 hover:bg-slate-700 text-slate-200 font-semibold rounded-xl text-xs transition-colors cursor-pointer border border-slate-700"
+                >
+                  <Eye className="w-4 h-4 text-indigo-400" />
+                  <span>View Details</span>
+                </button>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* STRICT READ-ONLY VIEW DETAILS MODAL */}
+      {selectedSession && (
+        <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-slate-900 border border-slate-800 p-6 rounded-2xl max-w-3xl w-full shadow-2xl space-y-5 max-h-[90vh] flex flex-col">
+            {/* Modal Header */}
+            <div className="flex items-start justify-between pb-4 border-b border-slate-800 shrink-0">
+              <div>
+                <h3 className="text-lg font-bold text-white flex items-center gap-2">
+                  <Calendar className="w-5 h-5 text-indigo-400" />
+                  <span>Attendance Details for {selectedSession.date}</span>
+                </h3>
+                <p className="text-xs text-slate-400 mt-1">
+                  {selectedSession.subject} &bull; Period {selectedSession.period} &bull; Saved at {selectedSession.savedAt}
+                </p>
+              </div>
+              <button
+                onClick={() => setSelectedSession(null)}
+                className="p-1 text-slate-400 hover:text-white rounded-lg hover:bg-slate-800 transition-colors cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Read-Only Guidance Note in Modal */}
+            <div className="p-3 rounded-xl bg-slate-950/60 border border-slate-800 text-xs text-slate-400 flex items-center justify-between shrink-0">
+              <span className="flex items-center gap-2">
+                <ShieldCheck className="w-4 h-4 text-emerald-400 shrink-0" />
+                <span>Strictly Read-Only View. Saved by {selectedSession.savedBy}.</span>
+              </span>
+              <span className="text-[10px] text-slate-500 font-mono">
+                Total: {selectedSession.totalStudents} Students
+              </span>
+            </div>
+
+            {/* Modal Filter Bar */}
+            <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 justify-between shrink-0">
+              <div className="relative flex-1 max-w-sm">
+                <Search className="h-4 w-4 text-slate-500 absolute left-3 top-2.5 pointer-events-none" />
+                <input
+                  type="text"
+                  placeholder="Filter student list..."
+                  value={detailSearchQuery}
+                  onChange={(e) => setDetailSearchQuery(e.target.value)}
+                  className="w-full pl-9 pr-4 py-2 bg-slate-950/50 border border-slate-800 rounded-xl text-slate-200 placeholder-slate-500 text-xs focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                />
+              </div>
+
+              <div className="flex items-center gap-1.5 overflow-x-auto pb-1 sm:pb-0">
+                <Filter className="w-3.5 h-3.5 text-slate-500 shrink-0 mr-1" />
+                {['ALL', 'Present', 'Absent', 'On Duty (OD)', 'Medical Leave (ML)', 'Long Absent'].map((st) => (
+                  <button
+                    key={st}
+                    onClick={() => setDetailStatusFilter(st)}
+                    className={`px-2.5 py-1 rounded-lg text-[10px] font-bold transition-all whitespace-nowrap cursor-pointer ${
+                      detailStatusFilter === st
+                        ? 'bg-indigo-600 text-white'
+                        : 'bg-slate-800 text-slate-400 hover:text-slate-200'
+                    }`}
+                  >
+                    {st === 'Medical Leave (ML)' ? 'ML' : st === 'On Duty (OD)' ? 'OD' : st}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Read-Only Student Status List Table */}
+            <div className="flex-1 overflow-y-auto custom-scrollbar border border-slate-800 rounded-xl">
+              {loadingDetails ? (
+                <div className="flex items-center justify-center py-16">
+                  <Loader2 className="w-8 h-8 text-indigo-500 animate-spin" />
+                </div>
+              ) : filteredModalStudents.length === 0 ? (
+                <div className="py-16 text-center text-slate-500 text-xs">
+                  No student records match selected filter.
+                </div>
+              ) : (
+                <table className="w-full text-left border-collapse text-xs">
+                  <thead>
+                    <tr className="bg-slate-950/60 border-b border-slate-800 text-[10px] font-bold uppercase tracking-wider text-slate-400 sticky top-0 backdrop-blur-md">
+                      <th className="px-6 py-3">Student Name</th>
+                      <th className="px-6 py-3">Register Number</th>
+                      <th className="px-6 py-3 text-right">Saved Attendance Status</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-850">
+                    {filteredModalStudents.map((student) => {
+                      const status = sessionAttendance[student.id] || 'Unmarked';
+                      return (
+                        <tr key={student.id} className="hover:bg-slate-800/10">
+                          <td className="px-6 py-3 font-semibold text-slate-100">
+                            {student.studentName}
+                          </td>
+                          <td className="px-6 py-3 font-mono text-slate-400">
+                            {student.registerNumber}
+                          </td>
+                          <td className="px-6 py-3 text-right">
+                            {getStatusBadge(status)}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              )}
+            </div>
+
+            {/* Modal Footer */}
+            <div className="pt-3 border-t border-slate-800 flex items-center justify-between shrink-0 text-xs">
+              <span className="text-slate-500 font-medium">
+                Showing {filteredModalStudents.length} of {students.length} students
+              </span>
+              <button
+                onClick={() => setSelectedSession(null)}
+                className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 font-semibold rounded-xl transition-colors cursor-pointer"
+              >
+                Close Details
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

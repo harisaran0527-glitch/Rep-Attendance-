@@ -541,6 +541,80 @@ export async function getAttendanceForDateAction(dateString: string) {
   }
 }
 
+export async function getAllAttendanceSessionsAction() {
+  if (!(await isStaffAuthenticated())) {
+    throw new Error('Unauthorized');
+  }
+
+  try {
+    const settings = await getSmtpSettings();
+    const openingDateStr = settings.collegeOpeningDate || '2026-07-13';
+    const openingDate = normalizeDate(openingDateStr);
+
+    const distinctDates = await prisma.attendance.findMany({
+      where: {
+        date: {
+          gte: openingDate,
+        },
+      },
+      select: {
+        date: true,
+        updatedAt: true,
+      },
+      distinct: ['date'],
+      orderBy: { date: 'desc' },
+    });
+
+    const totalStudents = await prisma.student.count();
+
+    const sessions = await Promise.all(
+      distinctDates.map(async (item) => {
+        const dateStr = item.date.toISOString().split('T')[0];
+        const dateNorm = normalizeDate(item.date);
+
+        const records = await prisma.attendance.findMany({
+          where: { date: dateNorm },
+          select: { status: true },
+        });
+
+        const counts = {
+          Present: 0,
+          Absent: 0,
+          'On Duty (OD)': 0,
+          'Medical Leave (ML)': 0,
+          'Long Absent': 0,
+        };
+
+        records.forEach((r) => {
+          if (r.status in counts) {
+            counts[r.status as keyof typeof counts]++;
+          }
+        });
+
+        return {
+          id: dateStr,
+          date: dateStr,
+          subject: 'General Daily Attendance',
+          period: 1,
+          totalStudents,
+          present: counts['Present'],
+          absent: counts['Absent'],
+          od: counts['On Duty (OD)'],
+          ml: counts['Medical Leave (ML)'],
+          la: counts['Long Absent'],
+          savedAt: item.updatedAt ? new Date(item.updatedAt).toLocaleString() : dateStr,
+          savedBy: 'Class Representative Admin',
+        };
+      })
+    );
+
+    return { success: true, data: sessions };
+  } catch (error) {
+    console.error('Error fetching attendance sessions:', error);
+    return { success: false, error: 'Failed to load attendance history sessions.' };
+  }
+}
+
 export async function getDashboardStatsAction(dateString: string) {
   if (!(await isStaffAuthenticated())) {
     throw new Error('Unauthorized');
