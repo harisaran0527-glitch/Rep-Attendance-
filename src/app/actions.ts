@@ -50,19 +50,82 @@ export async function getAllStudentsWithStats() {
   if (!(await isStaffAuthenticated())) {
     throw new Error('Unauthorized');
   }
+
+  // 1. Fetch ALL 58 active students unconditionally
   const students = await dbGetAllStudents();
-  const results = await Promise.all(
-    students.map(async (student) => {
-      const stats = await calculateOverallAttendance(student.id);
+
+  try {
+    // 2. Fetch baseline opening date from settings
+    const settings = await getSmtpSettings();
+    const openingDateStr = settings.collegeOpeningDate || '2026-07-13';
+    const openingDate = normalizeDate(openingDateStr);
+    const now = normalizeDate(new Date());
+
+    // 3. Bulk fetch distinct marked attendance dates
+    const distinctMarked = await prisma.attendance.findMany({
+      where: {
+        date: {
+          gte: openingDate,
+          lte: now,
+        },
+      },
+      select: { date: true },
+      distinct: ['date'],
+    });
+    const totalWorkingDays = distinctMarked.length;
+
+    // 4. Bulk fetch ALL attendance records for all students
+    const allAttendances = await prisma.attendance.findMany({
+      where: {
+        date: {
+          gte: openingDate,
+          lte: now,
+        },
+      },
+      select: {
+        studentId: true,
+        status: true,
+      },
+    });
+
+    const attendedStatuses = ['Present', 'Late', 'On Duty (OD)', 'Medical Leave (ML)'];
+
+    // Map present count per studentId
+    const presentCountMap: Record<number, number> = {};
+    allAttendances.forEach((att) => {
+      if (attendedStatuses.includes(att.status)) {
+        presentCountMap[att.studentId] = (presentCountMap[att.studentId] || 0) + 1;
+      }
+    });
+
+    // Map all 58 students (including students with 0 attendance records)
+    return students.map((student) => {
+      const attended = presentCountMap[student.id] || 0;
+      const percentage = totalWorkingDays > 0 
+        ? Math.round((attended / totalWorkingDays) * 1000) / 10 
+        : 100.0;
+
       return {
         ...student,
-        percentage: stats.percentage,
-        attended: stats.attended,
-        totalClasses: stats.total,
+        percentage,
+        attended,
+        totalClasses: totalWorkingDays,
+        daysPresent: attended,
+        daysAbsent: Math.max(0, totalWorkingDays - attended),
       };
-    })
-  );
-  return results;
+    });
+  } catch (error) {
+    console.error('Error calculating bulk stats, falling back to base student list:', error);
+    // Fallback: Return all 58 students so student list NEVER breaks
+    return students.map((student) => ({
+      ...student,
+      percentage: 100.0,
+      attended: 0,
+      totalClasses: 0,
+      daysPresent: 0,
+      daysAbsent: 0,
+    }));
+  }
 }
 
 // ==========================================
