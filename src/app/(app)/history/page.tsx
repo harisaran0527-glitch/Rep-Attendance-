@@ -143,20 +143,28 @@ export default function HistoryPage() {
   // Share handler for ONLY the specific status detail card image
   const handleShareStatusCard = async (sessionItem: AttendanceSession, status: string) => {
     const cardKey = `${sessionItem.id}_${status}`;
-    const cardElement = statusCardRefMap.current[cardKey];
-
-    if (!cardElement) return;
-
     setSharingCardKey(cardKey);
+
     try {
+      console.log(`[Share] Attempting to share status card with key: "${cardKey}"`);
+      const cardElement = statusCardRefMap.current[cardKey];
+
+      if (!cardElement) {
+        console.error(`[Share] Status card DOM element with key "${cardKey}" was not found.`);
+        alert(`Unable to locate report card for ${status}. Please try selecting the ${status} tab again.`);
+        return;
+      }
+
       const cleanDate = sessionItem.date.replace(/[^a-zA-Z0-9]/g, '_');
       const cleanStatus = status.replace(/[^a-zA-Z0-9]/g, '_');
       const fileName = `Attendance_${cleanDate}_P${sessionItem.period}_${cleanStatus}.png`;
 
       await shareStatusCardAsImage(cardElement, fileName);
-    } catch (err) {
-      console.error('Error sharing status card image:', err);
+    } catch (err: any) {
+      console.error('[Share] Error sharing status card image:', err);
+      alert(`Share error: ${err?.message || 'Failed to capture or share status card'}`);
     } finally {
+      // ALWAYS clear loading state so UI never gets stuck
       setSharingCardKey(null);
     }
   };
