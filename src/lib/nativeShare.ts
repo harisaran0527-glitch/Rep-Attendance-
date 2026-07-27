@@ -21,37 +21,14 @@ export interface ShareElementParams {
 
 /**
  * Helper function to apply screenshot-safe HEX/RGB styles to a cloned card element
- * so html2canvas never encounters modern unsupported CSS color functions like
- * lab(), oklab(), oklch(), or color-mix().
+ * and expand all student rows so html2canvas captures the full height student list
+ * cleanly without modern unsupported CSS color errors (lab, oklch, color-mix).
  */
 function sanitizeClonedCardForCapture(clonedDoc: Document, clonedElement: HTMLElement) {
-  // 1. Remove all external <style> and <link> tags in clonedDoc to prevent getComputedStyle
-  // from resolving stylesheet rules containing lab(), oklab(), oklch(), or color-mix()
-  const stylesheets = clonedDoc.querySelectorAll('style, link[rel="stylesheet"]');
-  stylesheets.forEach((sheet) => {
-    try {
-      sheet.remove();
-    } catch (e) {
-      // Ignore cleanup errors
-    }
-  });
-
-  // 2. Hide share buttons in cloned card element so they don't appear in the captured image
-  const buttons = clonedElement.querySelectorAll('button');
-  buttons.forEach((btn) => {
-    if (btn.textContent?.includes('Share') || btn.textContent?.includes('Capturing')) {
-      (btn as HTMLElement).style.display = 'none';
-    }
-  });
-
-  // 3. Expand overflow scrollbars in cloned element so full table content renders cleanly
-  const scrollableElements = clonedElement.querySelectorAll('.max-h-96, .overflow-y-auto');
-  scrollableElements.forEach((el) => {
-    (el as HTMLElement).style.maxHeight = 'none';
-    (el as HTMLElement).style.overflow = 'visible';
-  });
-
-  // 4. Apply solid screenshot-safe background and readable dark typography to card container
+  // 1. Set full card container to auto height, no max-height, and visible overflow
+  clonedElement.style.height = 'auto';
+  clonedElement.style.maxHeight = 'none';
+  clonedElement.style.overflow = 'visible';
   clonedElement.style.backgroundColor = '#ffffff';
   clonedElement.style.color = '#0f172a';
   clonedElement.style.border = '1px solid #cbd5e1';
@@ -63,108 +40,111 @@ function sanitizeClonedCardForCapture(clonedDoc: Document, clonedElement: HTMLEl
   clonedElement.style.filter = 'none';
   clonedElement.style.fontFamily = 'ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
 
-  // Helper for status badge colors (strictly HEX/RGB)
-  const getStatusBadgeStyle = (statusText: string) => {
-    const s = statusText.trim().toLowerCase();
-    if (s.includes('present')) {
-      return { bg: '#d1fae5', color: '#065f46', border: '#a7f3d0' }; // Emerald
-    }
-    if (s.includes('absent') && !s.includes('long')) {
-      return { bg: '#ffe4e6', color: '#9f1239', border: '#fecdd3' }; // Rose
-    }
-    if (s.includes('od') || s.includes('on duty')) {
-      return { bg: '#dbeafe', color: '#1e40af', border: '#bfdbfe' }; // Blue
-    }
-    if (s.includes('ml') || s.includes('medical leave')) {
-      return { bg: '#f3e8ff', color: '#6b21a8', border: '#e9d5ff' }; // Purple
-    }
-    if (s.includes('la') || s.includes('long absent')) {
-      return { bg: '#f4f4f5', color: '#27272a', border: '#e4e4e7' }; // Zinc
-    }
-    return { bg: '#e0e7ff', color: '#3730a3', border: '#c7d2fe' }; // Indigo default
-  };
-
-  // 5. Recursively sanitize all descendant elements in clonedElement
-  const allChildren = Array.from(clonedElement.querySelectorAll('*')) as HTMLElement[];
-  allChildren.forEach((child) => {
-    // Remove class attribute so Tailwind lab()/oklch() rules are completely stripped
-    child.removeAttribute('class');
-
-    // Strip unsupported filter / shadow effects
-    child.style.boxShadow = 'none';
-    child.style.textShadow = 'none';
-    child.style.backdropFilter = 'none';
-    (child.style as any).webkitBackdropFilter = 'none';
-    child.style.filter = 'none';
-
-    const tag = child.tagName.toLowerCase();
-    const text = (child.textContent || '').trim();
-
-    // Default typography colors
-    if (['span', 'p', 'h1', 'h2', 'h3', 'h4', 'div', 'td', 'th'].includes(tag)) {
-      child.style.color = '#1e293b';
-    }
-
-    // Tables
-    if (tag === 'table') {
-      child.style.width = '100%';
-      child.style.borderCollapse = 'collapse';
-      child.style.backgroundColor = '#ffffff';
-      child.style.marginTop = '16px';
-      child.style.marginBottom = '16px';
-    }
-    if (tag === 'thead') {
-      child.style.backgroundColor = '#f8fafc';
-    }
-    if (tag === 'tr') {
-      child.style.borderBottom = '1px solid #e2e8f0';
-    }
-    if (tag === 'th') {
-      child.style.padding = '12px 16px';
-      child.style.color = '#475569';
-      child.style.fontWeight = '700';
-      child.style.fontSize = '12px';
-      child.style.textAlign = child.style.textAlign || 'left';
-      child.style.backgroundColor = '#f8fafc';
-      child.style.borderBottom = '2px solid #cbd5e1';
-      child.style.textTransform = 'uppercase';
-    }
-    if (tag === 'td') {
-      child.style.padding = '12px 16px';
-      child.style.fontSize = '13px';
-      child.style.color = '#0f172a';
-    }
-
-    // Register numbers & monospace text
-    if (tag === 'td' && /^[0-9]{9,15}$/.test(text)) {
-      child.style.color = '#4338ca';
-      child.style.fontFamily = 'monospace';
-      child.style.fontWeight = '700';
-    }
-
-    // Badges (Present, Absent, OD, ML, LA, Count pills)
+  // 2. Hide ONLY the Share button and loading spinner in cloned element
+  const buttons = clonedElement.querySelectorAll('button');
+  buttons.forEach((btn) => {
     if (
-      tag === 'span' &&
-      (text.startsWith('Present') ||
-        text.startsWith('Absent') ||
-        text.startsWith('On Duty') ||
-        text.startsWith('OD') ||
-        text.startsWith('Medical Leave') ||
-        text.startsWith('ML') ||
-        text.startsWith('Long Absent') ||
-        text.startsWith('LA') ||
-        text.startsWith('Count:') ||
-        text.startsWith('Strictly Read-Only'))
+      btn.textContent?.includes('Share') ||
+      btn.textContent?.includes('Capturing') ||
+      btn.querySelector('.animate-spin')
     ) {
-      const badge = getStatusBadgeStyle(text);
-      child.style.backgroundColor = badge.bg;
-      child.style.color = badge.color;
-      child.style.border = `1px solid ${badge.border}`;
-      child.style.padding = '4px 12px';
-      child.style.borderRadius = '9999px';
-      child.style.fontWeight = '700';
-      child.style.fontSize = '12px';
-      child.style.display = 'inline-block';
+      (btn as HTMLElement).style.display = 'none';
+    }
+  });
+
+  // 3. Expand all scrollable containers and student table wrappers so every student row is visible
+  const scrollableElements = clonedElement.querySelectorAll('.max-h-96, .overflow-y-auto, div, table, tbody');
+  scrollableElements.forEach((el) => {
+    const htmlEl = el as HTMLElement;
+    htmlEl.style.height = 'auto';
+    htmlEl.style.maxHeight = 'none';
+    htmlEl.style.overflow = 'visible';
+  });
+
+  // 4. Ensure tables, rows, and cells remain properly formatted table elements
+  const tables = clonedElement.querySelectorAll('table');
+  tables.forEach((table) => {
+    table.style.width = '100%';
+    table.style.borderCollapse = 'collapse';
+    table.style.height = 'auto';
+    table.style.maxHeight = 'none';
+    table.style.overflow = 'visible';
+    table.style.backgroundColor = '#ffffff';
+  });
+
+  const rows = clonedElement.querySelectorAll('tr');
+  rows.forEach((tr) => {
+    const htmlTr = tr as HTMLElement;
+    htmlTr.style.display = 'table-row';
+    htmlTr.style.height = 'auto';
+    htmlTr.style.visibility = 'visible';
+  });
+
+  const cells = clonedElement.querySelectorAll('th, td');
+  cells.forEach((cell) => {
+    const htmlCell = cell as HTMLElement;
+    htmlCell.style.display = 'table-cell';
+    htmlCell.style.visibility = 'visible';
+    htmlCell.style.padding = '12px 16px';
+    if (cell.tagName.toLowerCase() === 'th') {
+      htmlCell.style.backgroundColor = '#f8fafc';
+      htmlCell.style.color = '#475569';
+      htmlCell.style.borderBottom = '2px solid #cbd5e1';
+      htmlCell.style.fontWeight = '700';
+    } else {
+      htmlCell.style.color = '#0f172a';
+      htmlCell.style.borderBottom = '1px solid #e2e8f0';
+    }
+  });
+
+  // 5. Override filters and apply explicit HEX/RGB badge styles on descendant elements
+  const allNodes = Array.from(clonedElement.querySelectorAll('*')) as HTMLElement[];
+  allNodes.forEach((node) => {
+    node.style.boxShadow = 'none';
+    node.style.textShadow = 'none';
+    node.style.backdropFilter = 'none';
+    (node.style as any).webkitBackdropFilter = 'none';
+    node.style.filter = 'none';
+
+    const text = (node.textContent || '').trim();
+    if (node.tagName.toLowerCase() === 'span') {
+      const s = text.toLowerCase();
+      if (s.startsWith('present')) {
+        node.style.backgroundColor = '#d1fae5';
+        node.style.color = '#065f46';
+        node.style.border = '1px solid #a7f3d0';
+        node.style.borderRadius = '9999px';
+        node.style.padding = '4px 12px';
+        node.style.fontWeight = '700';
+      } else if (s.startsWith('absent') && !s.includes('long')) {
+        node.style.backgroundColor = '#ffe4e6';
+        node.style.color = '#9f1239';
+        node.style.border = '1px solid #fecdd3';
+        node.style.borderRadius = '9999px';
+        node.style.padding = '4px 12px';
+        node.style.fontWeight = '700';
+      } else if (s.startsWith('od') || s.startsWith('on duty')) {
+        node.style.backgroundColor = '#dbeafe';
+        node.style.color = '#1e40af';
+        node.style.border = '1px solid #bfdbfe';
+        node.style.borderRadius = '9999px';
+        node.style.padding = '4px 12px';
+        node.style.fontWeight = '700';
+      } else if (s.startsWith('ml') || s.startsWith('medical leave')) {
+        node.style.backgroundColor = '#f3e8ff';
+        node.style.color = '#6b21a8';
+        node.style.border = '1px solid #e9d5ff';
+        node.style.borderRadius = '9999px';
+        node.style.padding = '4px 12px';
+        node.style.fontWeight = '700';
+      } else if (s.startsWith('la') || s.startsWith('long absent')) {
+        node.style.backgroundColor = '#f4f4f5';
+        node.style.color = '#27272a';
+        node.style.border = '1px solid #e4e4e7';
+        node.style.borderRadius = '9999px';
+        node.style.padding = '4px 12px';
+        node.style.fontWeight = '700';
+      }
     }
   });
 }
