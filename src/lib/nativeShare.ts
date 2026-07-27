@@ -56,7 +56,7 @@ ${studentDetails.map((st, i) => `${i + 1}. [${st.registerNumber}] ${st.studentNa
 --------------------------------------------------
 Status: Strictly Read-Only Attendance Record`;
 
-  // 2. Capture clean PNG image of ONLY the currently visible Show Details section
+  // 2. Capture clean PNG image of ONLY the currently expanded Show Details section
   let imageFile: File | null = null;
   try {
     const canvas = await html2canvas(element, {
@@ -77,49 +77,49 @@ Status: Strictly Read-Only Attendance Record`;
     console.warn('Canvas image capture fallback to text share:', err);
   }
 
-  // 3. Directly open WhatsApp / Native Share sheet without any options modal
-  // Attempt A: Native share sheet with Image File + Text (Supported on Mobile Browsers & Windows with WhatsApp)
+  // 3. Web Share API Execution
   if (typeof navigator !== 'undefined' && navigator.share) {
-    const shareData: ShareData = {
-      title: `Attendance Report - ${date}`,
-      text: summaryText,
-    };
-
+    // Attempt A: File Share via Web Share API if supported
     if (imageFile && navigator.canShare && navigator.canShare({ files: [imageFile] })) {
-      shareData.files = [imageFile];
+      try {
+        await navigator.share({
+          title: `Attendance Report - ${date}`,
+          text: summaryText,
+          files: [imageFile],
+        });
+        return;
+      } catch (err: any) {
+        if (err?.name === 'AbortError') return; // User cancelled share sheet
+        console.warn('File Web Share failed, falling back to text-only Web Share:', err);
+      }
     }
 
+    // Attempt B: Text-only Web Share API
     try {
-      await navigator.share(shareData);
+      await navigator.share({
+        title: `Attendance Report - ${date}`,
+        text: summaryText,
+      });
       return;
     } catch (err: any) {
-      if (err?.name === 'AbortError') return; // User canceled share
-      console.warn('Native share error, falling back to WhatsApp deep link:', err);
+      if (err?.name === 'AbortError') return; // User cancelled share sheet
+      console.warn('Text Web Share failed, falling back to WhatsApp URL:', err);
     }
   }
 
-  // Attempt B: WhatsApp direct URI scheme launch
+  // 4. WhatsApp Fallback (Valid text-only URL format: https://wa.me/?text=<encoded_text>)
   try {
-    const whatsappUrl = `whatsapp://send?text=${encodeURIComponent(summaryText)}`;
-    const webWhatsappUrl = `https://api.whatsapp.com/send?text=${encodeURIComponent(summaryText)}`;
-    
-    // Check if on mobile or try opening deep link
-    const isMobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
-    if (isMobile) {
-      window.location.href = whatsappUrl;
-      return;
-    } else {
-      window.open(webWhatsappUrl, '_blank');
-      return;
-    }
+    const validWaUrl = `https://wa.me/?text=${encodeURIComponent(summaryText)}`;
+    window.open(validWaUrl, '_blank');
+    return;
   } catch (err) {
-    console.warn('WhatsApp deep link failed, copying text to clipboard:', err);
+    console.warn('WhatsApp link fallback failed, attempting clipboard copy:', err);
   }
 
-  // Attempt C: Clipboard fallback for desktop without native share or WhatsApp app protocol
+  // 5. Final Clipboard Fallback
   try {
     await navigator.clipboard.writeText(summaryText);
-    alert(`Attendance report for ${date} copied to clipboard! You can now paste and send it directly on WhatsApp.`);
+    alert(`Attendance report for ${date} copied to clipboard! You can paste and send it on WhatsApp.`);
   } catch (clipErr) {
     console.error('Clipboard copy failed:', clipErr);
   }
