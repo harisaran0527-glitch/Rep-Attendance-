@@ -5,7 +5,7 @@ export async function setAdminSession(email: string) {
   cookieStore.set('admin_session', email, {
     httpOnly: true,
     secure: process.env.NODE_ENV === 'production',
-    sameSite: 'strict',
+    sameSite: 'lax',
     maxAge: 60 * 60 * 24 * 7, // 1 week
     path: '/',
   });
@@ -31,7 +31,7 @@ export async function setStudentSession(email: string, studentId: number) {
   cookieStore.set('student_session', JSON.stringify({ email, studentId }), {
     httpOnly: true,
     secure: process.env.NODE_ENV === 'production',
-    sameSite: 'strict',
+    sameSite: 'lax',
     maxAge: 60 * 60 * 24 * 7, // 1 week
     path: '/',
   });
@@ -63,7 +63,7 @@ export async function setTeacherSession(email: string, teacherId: number) {
   cookieStore.set('teacher_session', JSON.stringify({ email, teacherId }), {
     httpOnly: true,
     secure: process.env.NODE_ENV === 'production',
-    sameSite: 'strict',
+    sameSite: 'lax',
     maxAge: 60 * 60 * 24 * 7, // 1 week
     path: '/',
   });

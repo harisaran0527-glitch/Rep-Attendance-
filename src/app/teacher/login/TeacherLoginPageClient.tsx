@@ -20,8 +20,7 @@ export default function TeacherLoginPageClient() {
       try {
         const result = await teacherLoginAction(formData);
         if (result.success) {
-          router.push('/');
-          router.refresh();
+          window.location.href = '/';
         } else {
           setError(result.error || 'Invalid teacher credentials.');
         }

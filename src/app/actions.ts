@@ -1211,69 +1211,91 @@ export async function checkUserRoleAction() {
 }
 
 export async function getDailyAttendanceSummaryAction(dateString: string) {
-  if (!(await isStaffAuthenticated())) {
-    throw new Error('Unauthorized');
+  try {
+    if (!(await isStaffAuthenticated())) {
+      return {
+        success: false,
+        error: 'Unauthorized',
+        date: dateString,
+        totalStudents: 0,
+        presentTodayCount: 0,
+        absentTodayCount: 0,
+        absentStudentsList: [],
+      };
+    }
+
+    const targetDate = normalizeDate(new Date(dateString));
+
+    // Fetch all active students
+    const students = await prisma.student.findMany({
+      orderBy: { registerNumber: 'asc' },
+    });
+
+    // Fetch attendance records for the date
+    const attendances = await prisma.attendance.findMany({
+      where: { date: targetDate },
+    });
+
+    // Build a lookup map: studentId → attendance record
+    const attendanceMap: Record<number, { status: string; period: number }> = {};
+    attendances.forEach((a) => {
+      attendanceMap[a.studentId] = { status: a.status, period: a.period || 1 };
+    });
+
+    const absentStudentsList: any[] = [];
+    let presentTodayCount = 0;
+
+    students.forEach((student) => {
+      const rec = attendanceMap[student.id];
+
+      if (!rec) {
+        // No attendance record for this date
+        return;
+      }
+
+      const status = rec.status;
+
+      if (status === 'Absent' || status === 'Long Absent') {
+        // Explicitly absent
+        absentStudentsList.push({
+          id: student.id,
+          registerNumber: student.registerNumber,
+          studentName: student.studentName,
+          email: student.email,
+          department: student.department,
+          year: student.year,
+          section: student.section,
+          status,
+          absentPeriods: [rec.period],
+          absentSubjects: [status],
+          isFullDayAbsent: status === 'Long Absent' || status === 'Absent',
+          markedPeriodsCount: 1,
+          statusSummaryText: status,
+        });
+      } else if (status === 'Present' || status === 'On Duty (OD)' || status === 'Medical Leave (ML)') {
+        presentTodayCount++;
+      }
+    });
+
+    return {
+      success: true,
+      date: dateString,
+      totalStudents: students.length,
+      presentTodayCount,
+      absentTodayCount: absentStudentsList.length,
+      absentStudentsList,
+    };
+  } catch (error) {
+    console.error('Error in getDailyAttendanceSummaryAction:', error);
+    return {
+      success: false,
+      error: 'Failed to fetch daily summary.',
+      date: dateString,
+      totalStudents: 0,
+      presentTodayCount: 0,
+      absentTodayCount: 0,
+      absentStudentsList: [],
+    };
   }
-
-  const targetDate = normalizeDate(new Date(dateString));
-
-  // Fetch all active students
-  const students = await prisma.student.findMany({
-    orderBy: { registerNumber: 'asc' },
-  });
-
-  // Fetch attendance records for the date
-  const attendances = await prisma.attendance.findMany({
-    where: { date: targetDate },
-  });
-
-  // Build a lookup map: studentId → attendance record
-  const attendanceMap: Record<number, { status: string }> = {};
-  attendances.forEach((a) => {
-    attendanceMap[a.studentId] = { status: a.status };
-  });
-
-  const absentStudentsList: any[] = [];
-  let presentTodayCount = 0;
-
-  students.forEach((student) => {
-    const rec = attendanceMap[student.id];
-
-    if (!rec) {
-      // No attendance record for this date — not marked, do NOT count as present
-      return;
-    }
-
-    const status = rec.status;
-
-    if (status === 'Absent' || status === 'Long Absent') {
-      // Explicitly absent
-      absentStudentsList.push({
-        id: student.id,
-        registerNumber: student.registerNumber,
-        studentName: student.studentName,
-        email: student.email,
-        department: student.department,
-        year: student.year,
-        section: student.section,
-        status,
-        statusSummaryText: status,
-      });
-    } else if (status === 'Present' || status === 'On Duty (OD)' || status === 'Medical Leave (ML)') {
-      // Present, OD, and ML all count toward the "present today" count
-      // (they are NOT absent — student was accounted for)
-      presentTodayCount++;
-    }
-    // Any other unknown status: ignore (do not count either way)
-  });
-
-  return {
-    success: true,
-    date: dateString,
-    totalStudents: students.length,
-    presentTodayCount,
-    absentTodayCount: absentStudentsList.length,
-    absentStudentsList,
-  };
 }
 

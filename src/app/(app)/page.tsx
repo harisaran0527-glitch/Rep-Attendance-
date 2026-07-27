@@ -363,12 +363,12 @@ export default function DashboardPage() {
                         </td>
                         <td className="px-4 py-3.5">
                           <div className="flex flex-wrap gap-1">
-                            {student.absentSubjects.map((sub, idx) => (
+                            {(student.absentSubjects || []).map((sub, idx) => (
                               <span
                                 key={idx}
                                 className="px-2 py-0.5 rounded-md text-[10px] font-semibold bg-rose-500/10 text-rose-400 border border-rose-500/20"
                               >
-                                P{student.absentPeriods[idx]}: {sub}
+                                P{student.absentPeriods?.[idx] || 1}: {sub}
                               </span>
                             ))}
                           </div>
@@ -380,7 +380,7 @@ export default function DashboardPage() {
                             </span>
                           ) : (
                             <span className="px-2.5 py-1 rounded-full text-[10px] font-bold bg-amber-950/60 text-amber-400 border border-amber-500/30">
-                              Partial Absent ({student.absentPeriods.length} P)
+                              Partial Absent ({student.absentPeriods?.length || 1} P)
                             </span>
                           )}
                         </td>

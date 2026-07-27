@@ -47,8 +47,7 @@ export default function StudentLoginPageClient() {
       try {
         const result = await studentLoginAction(formData);
         if (result.success) {
-          router.push('/student/dashboard');
-          router.refresh();
+          window.location.href = '/student/dashboard';
         } else {
           setError(result.error || 'Invalid credentials.');
         }
@@ -73,8 +72,7 @@ export default function StudentLoginPageClient() {
       try {
         const result = await studentGoogleLoginAction(googleEmailInput);
         if (result.success) {
-          router.push('/student/dashboard');
-          router.refresh();
+          window.location.href = '/student/dashboard';
         } else {
           setError(result.error || 'Google login failed.');
         }

@@ -20,8 +20,7 @@ export default function LoginPageClient() {
     try {
       const result = await loginAction(formData);
       if (result.success) {
-        router.push('/');
-        router.refresh();
+        window.location.href = '/';
       } else {
         setError(result.error || 'Login failed.');
         setLoading(false);
