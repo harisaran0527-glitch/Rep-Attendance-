@@ -20,7 +20,7 @@ import {
 import * as XLSX from 'xlsx';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
-import ShareAttendanceModal from '@/components/ShareAttendanceModal';
+import { triggerNativeShare } from '@/lib/nativeShare';
 
 interface Student {
   id: number;
@@ -47,7 +47,40 @@ export default function ReportsPage() {
     new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]
   );
   const [studentEndDate, setStudentEndDate] = useState<string>(new Date().toISOString().split('T')[0]);
-  const [isShareModalOpen, setIsShareModalOpen] = useState(false);
+
+  const handleNativeShare = async () => {
+    if (!selectedStudentDetails) return;
+    const attendedCount = reportData.filter((r) => r[1] === 'Present' || r[1] === 'On Duty (OD)').length;
+    const absentCount = reportData.filter((r) => r[1] === 'Absent').length;
+    const totalCount = reportData.length;
+    const pct = totalCount > 0 ? Math.round((attendedCount / totalCount) * 10000) / 100 : 100;
+
+    await triggerNativeShare({
+      student: {
+        studentName: selectedStudentDetails.studentName,
+        registerNumber: selectedStudentDetails.registerNumber,
+        department: selectedStudentDetails.department,
+        year: selectedStudentDetails.year,
+        section: selectedStudentDetails.section,
+      },
+      stats: {
+        percentage: pct,
+        attended: attendedCount,
+        totalClasses: totalCount,
+        absent: absentCount,
+        daysPresent: attendedCount,
+        daysAbsent: absentCount,
+        totalDays: totalCount,
+      },
+      history: reportData.map((row, idx) => ({
+        id: idx,
+        date: row.date,
+        period: row.period || 1,
+        subject: row.subject || 'General Class',
+        status: row[1] || 'Unmarked',
+      })),
+    });
+  };
 
   // Load active student list on mount
   useEffect(() => {
@@ -315,7 +348,7 @@ export default function ReportsPage() {
         <div className="flex flex-wrap items-center justify-end gap-3 pt-4 border-t border-slate-800">
           {activeTab === 'student' && selectedStudentDetails && (
             <button
-              onClick={() => setIsShareModalOpen(true)}
+              onClick={handleNativeShare}
               disabled={loading || reportData.length === 0}
               className="flex items-center gap-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white font-bold rounded-xl text-xs disabled:opacity-50 transition-all cursor-pointer shadow-lg shadow-indigo-600/20"
             >
@@ -426,38 +459,6 @@ export default function ReportsPage() {
         )}
       </div>
 
-      {/* Share Modal for Student Report */}
-      {selectedStudentDetails && (
-        <ShareAttendanceModal
-          isOpen={isShareModalOpen}
-          onClose={() => setIsShareModalOpen(false)}
-          student={{
-            studentName: selectedStudentDetails.studentName,
-            registerNumber: selectedStudentDetails.registerNumber,
-            department: selectedStudentDetails.department,
-            year: selectedStudentDetails.year,
-            section: selectedStudentDetails.section,
-          }}
-          stats={{
-            percentage: reportData.length > 0
-              ? Math.round((reportData.filter(r => r[1] === 'Present' || r[1] === 'On Duty (OD)').length / reportData.length) * 10000) / 100
-              : 100,
-            attended: reportData.filter(r => r[1] === 'Present' || r[1] === 'On Duty (OD)').length,
-            totalClasses: reportData.length,
-            absent: reportData.filter(r => r[1] === 'Absent').length,
-            daysPresent: reportData.filter(r => r[1] === 'Present' || r[1] === 'On Duty (OD)').length,
-            daysAbsent: reportData.filter(r => r[1] === 'Absent').length,
-            totalDays: reportData.length,
-          }}
-          history={reportData.map((row, idx) => ({
-            id: idx,
-            date: row.date,
-            period: row.period || 1,
-            subject: row.subject || 'General Class',
-            status: row[1] || 'Unmarked',
-          }))}
-        />
-      )}
     </div>
   );
 }
