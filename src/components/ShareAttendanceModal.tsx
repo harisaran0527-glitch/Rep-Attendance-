@@ -317,11 +317,11 @@ export default function ShareAttendanceModal({
     }
 
     const canvas = await html2canvas(reportPreviewRef.current, {
-      scale: 2, // High DPI
+      scale: 2,
       useCORS: true,
-      backgroundColor: '#0f172a', // Dark background theme
+      backgroundColor: '#0f172a',
       logging: false,
-    });
+    } as any);
 
     const dataUrl = canvas.toDataURL('image/png');
     const blob = await new Promise<Blob>((resolve, reject) => {
