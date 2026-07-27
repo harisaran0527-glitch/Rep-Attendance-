@@ -19,10 +19,12 @@ import {
   Sparkles,
   ChevronLeft,
   ChevronRight,
-  Info
+  Info,
+  Share2
 } from 'lucide-react';
 import { studentLogoutAction } from '../../actions';
 import { isHoliday, isSundayDate } from '@/lib/holidays';
+import ShareAttendanceModal from '@/components/ShareAttendanceModal';
 
 interface StudentProps {
   id: number;
@@ -92,6 +94,7 @@ export default function StudentDashboardClient({
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState('ALL');
   const [activeTab, setActiveTab] = useState<'overview' | 'calendar' | 'history'>('overview');
+  const [isShareModalOpen, setIsShareModalOpen] = useState(false);
 
   // Calendar State
   const [currentDate, setCurrentDate] = useState(new Date());
@@ -275,6 +278,14 @@ export default function StudentDashboardClient({
 
           <div className="flex items-center gap-3">
             <button
+              onClick={() => setIsShareModalOpen(true)}
+              className="flex items-center gap-2 px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs shadow-lg shadow-indigo-600/20 transition-all cursor-pointer"
+              title="Share Attendance History"
+            >
+              <Share2 className="w-4 h-4" />
+              <span>Share History</span>
+            </button>
+            <button
               onClick={handleLogout}
               disabled={isPending}
               className="flex items-center gap-2 px-3.5 py-2 rounded-xl bg-slate-800/60 hover:bg-slate-800 text-slate-300 hover:text-white border border-slate-700/50 text-xs font-semibold transition-all cursor-pointer"
@@ -427,24 +438,35 @@ export default function StudentDashboardClient({
         </div>
 
         {/* Tab Navigation */}
-        <div className="flex border-b border-slate-800 space-x-6 text-sm font-semibold">
+        <div className="flex items-center justify-between border-b border-slate-800 pb-1">
+          <div className="flex space-x-6 text-sm font-semibold">
+            <button
+              onClick={() => setActiveTab('overview')}
+              className={`pb-3 transition-colors cursor-pointer border-b-2 ${activeTab === 'overview' ? 'border-indigo-500 text-indigo-400' : 'border-transparent text-slate-400 hover:text-slate-200'}`}
+            >
+              Attendance Overview
+            </button>
+            <button
+              onClick={() => setActiveTab('calendar')}
+              className={`pb-3 transition-colors cursor-pointer border-b-2 ${activeTab === 'calendar' ? 'border-indigo-500 text-indigo-400' : 'border-transparent text-slate-400 hover:text-slate-200'}`}
+            >
+              Attendance Calendar
+            </button>
+            <button
+              onClick={() => setActiveTab('history')}
+              className={`pb-3 transition-colors cursor-pointer border-b-2 ${activeTab === 'history' ? 'border-indigo-500 text-indigo-400' : 'border-transparent text-slate-400 hover:text-slate-200'}`}
+            >
+              Attendance Logs ({history.length})
+            </button>
+          </div>
+
           <button
-            onClick={() => setActiveTab('overview')}
-            className={`pb-3 transition-colors cursor-pointer border-b-2 ${activeTab === 'overview' ? 'border-indigo-500 text-indigo-400' : 'border-transparent text-slate-400 hover:text-slate-200'}`}
+            onClick={() => setIsShareModalOpen(true)}
+            className="flex items-center gap-2 px-3.5 py-1.5 rounded-xl bg-indigo-600/20 hover:bg-indigo-600/30 text-indigo-300 border border-indigo-500/30 text-xs font-bold transition-all cursor-pointer mb-2"
+            title="Share Attendance Report"
           >
-            Attendance Overview
-          </button>
-          <button
-            onClick={() => setActiveTab('calendar')}
-            className={`pb-3 transition-colors cursor-pointer border-b-2 ${activeTab === 'calendar' ? 'border-indigo-500 text-indigo-400' : 'border-transparent text-slate-400 hover:text-slate-200'}`}
-          >
-            Attendance Calendar
-          </button>
-          <button
-            onClick={() => setActiveTab('history')}
-            className={`pb-3 transition-colors cursor-pointer border-b-2 ${activeTab === 'history' ? 'border-indigo-500 text-indigo-400' : 'border-transparent text-slate-400 hover:text-slate-200'}`}
-          >
-            Attendance Logs ({history.length})
+            <Share2 className="w-3.5 h-3.5" />
+            <span>Share Report</span>
           </button>
         </div>
 
@@ -666,6 +688,15 @@ export default function StudentDashboardClient({
         )}
 
       </main>
+
+      {/* Share Attendance History Modal */}
+      <ShareAttendanceModal
+        isOpen={isShareModalOpen}
+        onClose={() => setIsShareModalOpen(false)}
+        student={student}
+        stats={stats}
+        history={history}
+      />
     </div>
   );
 }

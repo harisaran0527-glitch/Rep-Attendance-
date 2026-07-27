@@ -36,6 +36,7 @@ import {
   getWorkingDaysCount,
   getValidWorkingDates,
   ATTENDANCE_START_DATE,
+  SUBJECTS,
   addTeacher,
   getAllTeachers,
   deleteTeacher,
@@ -1039,8 +1040,23 @@ export async function getStudentHistoryAction() {
   return validAttendances.map((att) => ({
     id: att.id,
     date: att.date.toISOString().split('T')[0],
+    period: att.period || 1,
+    subject: SUBJECTS[att.period as keyof typeof SUBJECTS] || 'General Subject',
     status: att.status,
   }));
+}
+
+export async function getCollegeSettingsAction() {
+  try {
+    const settings = await getSmtpSettings();
+    return {
+      collegeName: settings.senderName || 'College Attendance Portal',
+    };
+  } catch (error) {
+    return {
+      collegeName: 'College Attendance Portal',
+    };
+  }
 }
 
 export async function getStudentSubjectStatsAction() {
