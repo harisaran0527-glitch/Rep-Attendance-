@@ -1107,6 +1107,9 @@ export async function getStudentMonthlyStatsAction() {
   const results = Object.entries(monthlyData).map(([yearMonth, stats]) => ({
     yearMonth,
     monthName: stats.monthName,
+    month: stats.monthName,
+    attended: stats.attended,
+    total: stats.total,
     percentage: stats.total > 0 ? Math.round((stats.attended / stats.total) * 100) : 100,
   }));
 

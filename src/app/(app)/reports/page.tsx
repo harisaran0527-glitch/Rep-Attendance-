@@ -15,12 +15,10 @@ import {
   Printer,
   ChevronRight,
   TrendingUp,
-  Share2,
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
-import { triggerNativeShare } from '@/lib/nativeShare';
 
 interface Student {
   id: number;
@@ -47,40 +45,6 @@ export default function ReportsPage() {
     new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]
   );
   const [studentEndDate, setStudentEndDate] = useState<string>(new Date().toISOString().split('T')[0]);
-
-  const handleNativeShare = async () => {
-    if (!selectedStudentDetails) return;
-    const attendedCount = reportData.filter((r) => r[1] === 'Present' || r[1] === 'On Duty (OD)').length;
-    const absentCount = reportData.filter((r) => r[1] === 'Absent').length;
-    const totalCount = reportData.length;
-    const pct = totalCount > 0 ? Math.round((attendedCount / totalCount) * 10000) / 100 : 100;
-
-    await triggerNativeShare({
-      student: {
-        studentName: selectedStudentDetails.studentName,
-        registerNumber: selectedStudentDetails.registerNumber,
-        department: selectedStudentDetails.department,
-        year: selectedStudentDetails.year,
-        section: selectedStudentDetails.section,
-      },
-      stats: {
-        percentage: pct,
-        attended: attendedCount,
-        totalClasses: totalCount,
-        absent: absentCount,
-        daysPresent: attendedCount,
-        daysAbsent: absentCount,
-        totalDays: totalCount,
-      },
-      history: reportData.map((row, idx) => ({
-        id: idx,
-        date: row.date,
-        period: row.period || 1,
-        subject: row.subject || 'General Class',
-        status: row[1] || 'Unmarked',
-      })),
-    });
-  };
 
   // Load active student list on mount
   useEffect(() => {
@@ -161,7 +125,7 @@ export default function ReportsPage() {
   // EXPORT PDF LOGIC
   const exportToPDF = () => {
     const doc = new jsPDF('portrait');
-    const primaryColor = [15, 23, 42]; // Slate 900
+    const primaryColor = [15, 23, 42];
 
     doc.setFillColor(primaryColor[0], primaryColor[1], primaryColor[2]);
     doc.rect(0, 0, doc.internal.pageSize.width, 24, 'F');
@@ -211,7 +175,7 @@ export default function ReportsPage() {
       body: rows,
       theme: 'grid',
       headStyles: {
-        fillColor: [79, 70, 229], // Indigo 600
+        fillColor: [79, 70, 229],
         textColor: 255,
         fontSize: 9,
         fontStyle: 'bold',
@@ -233,27 +197,29 @@ export default function ReportsPage() {
   };
 
   return (
-    <div className="space-y-8 max-w-7xl mx-auto">
+    <div className="space-y-6 max-w-7xl mx-auto pb-12">
       {/* Header section with Tabs */}
-      <div className="glass p-6 rounded-2xl flex flex-col md:flex-row gap-6 justify-between items-start md:items-center">
-        <div>
-          <h3 className="text-lg font-semibold text-slate-100 flex items-center gap-2">
-            <FileText className="w-5 h-5 text-indigo-400" />
+      <div className="glass p-6 rounded-3xl flex flex-col md:flex-row gap-6 justify-between items-start md:items-center shadow-xl">
+        <div className="space-y-1">
+          <h3 className="text-2xl font-extrabold text-slate-100 light:text-slate-900 flex items-center gap-3">
+            <div className="p-2.5 rounded-2xl bg-indigo-600/20 text-indigo-400 border border-indigo-500/30">
+              <FileText className="w-6 h-6" />
+            </div>
             <span>Attendance Reports & Exports</span>
           </h3>
-          <p className="text-xs text-slate-400 mt-1">
-            Generate and export daily and student date-range attendance reports to Excel or PDF.
+          <p className="text-xs text-slate-400 light:text-slate-600">
+            Generate daily and student date-range reports. Export directly to Excel or PDF.
           </p>
         </div>
 
         {/* Tab Buttons */}
-        <div className="flex bg-slate-950/60 p-1.5 rounded-xl border border-slate-800/80">
+        <div className="flex bg-slate-950/60 light:bg-slate-200/80 p-1.5 rounded-2xl border border-slate-800 light:border-slate-300">
           <button
             onClick={() => setActiveTab('daily')}
-            className={`flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
+            className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
               activeTab === 'daily'
-                ? 'bg-indigo-600 text-white shadow-md'
-                : 'text-slate-400 hover:text-slate-200'
+                ? 'btn-gradient shadow-md'
+                : 'text-slate-400 light:text-slate-700 hover:text-slate-200'
             }`}
           >
             <Calendar className="w-4 h-4" />
@@ -261,10 +227,10 @@ export default function ReportsPage() {
           </button>
           <button
             onClick={() => setActiveTab('student')}
-            className={`flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
+            className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
               activeTab === 'student'
-                ? 'bg-indigo-600 text-white shadow-md'
-                : 'text-slate-400 hover:text-slate-200'
+                ? 'btn-gradient shadow-md'
+                : 'text-slate-400 light:text-slate-700 hover:text-slate-200'
             }`}
           >
             <User className="w-4 h-4" />
@@ -274,24 +240,24 @@ export default function ReportsPage() {
       </div>
 
       {/* Configuration & Filter Controls */}
-      <div className="glass p-6 rounded-2xl border border-slate-800 space-y-4">
-        <h4 className="text-xs font-bold uppercase tracking-wider text-slate-400 flex items-center gap-2">
-          <FileText className="w-4.5 h-4.5 text-indigo-400" />
-          <span>Report Configuration</span>
+      <div className="glass-card p-6 rounded-3xl space-y-4">
+        <h4 className="text-xs font-extrabold uppercase tracking-wider text-slate-400 light:text-slate-600 flex items-center gap-2">
+          <FileText className="w-4 h-4 text-indigo-400" />
+          <span>Report Parameters</span>
         </h4>
 
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
           {/* TAB 1: Daily Report Filters */}
           {activeTab === 'daily' && (
             <div className="md:col-span-1">
-              <label className="block text-[10px] uppercase font-bold tracking-wider text-slate-400 mb-1.5">
+              <label className="block text-[10px] uppercase font-bold tracking-wider text-slate-400 light:text-slate-600 mb-1.5">
                 Report Date
               </label>
               <input
                 type="date"
                 value={dailyDate}
                 onChange={(e) => setDailyDate(e.target.value)}
-                className="w-full px-3.5 py-2.5 bg-slate-950/50 border border-slate-700/50 rounded-xl text-slate-200 text-sm focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                className="w-full px-4 py-2.5 bg-slate-950/50 light:bg-slate-100 border border-slate-700/50 light:border-slate-300 rounded-xl text-slate-200 light:text-slate-900 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 transition-all"
               />
             </div>
           )}
@@ -300,13 +266,13 @@ export default function ReportsPage() {
           {activeTab === 'student' && (
             <>
               <div>
-                <label className="block text-[10px] uppercase font-bold tracking-wider text-slate-400 mb-1.5">
+                <label className="block text-[10px] uppercase font-bold tracking-wider text-slate-400 light:text-slate-600 mb-1.5">
                   Select Student
                 </label>
                 <select
                   value={selectedStudentId}
                   onChange={(e) => setSelectedStudentId(e.target.value)}
-                  className="w-full px-3.5 py-2.5 bg-slate-950/50 border border-slate-700/50 rounded-xl text-slate-200 text-sm focus:outline-none focus:ring-1 focus:ring-indigo-500 cursor-pointer"
+                  className="w-full px-4 py-2.5 bg-slate-950/50 light:bg-slate-100 border border-slate-700/50 light:border-slate-300 rounded-xl text-slate-200 light:text-slate-900 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 cursor-pointer transition-all"
                 >
                   <option value="" disabled>Choose a student...</option>
                   {students.map((student) => (
@@ -318,26 +284,26 @@ export default function ReportsPage() {
               </div>
 
               <div>
-                <label className="block text-[10px] uppercase font-bold tracking-wider text-slate-400 mb-1.5">
+                <label className="block text-[10px] uppercase font-bold tracking-wider text-slate-400 light:text-slate-600 mb-1.5">
                   Start Date
                 </label>
                 <input
                   type="date"
                   value={studentStartDate}
                   onChange={(e) => setStudentStartDate(e.target.value)}
-                  className="w-full px-3.5 py-2.5 bg-slate-950/50 border border-slate-700/50 rounded-xl text-slate-200 text-sm focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                  className="w-full px-4 py-2.5 bg-slate-950/50 light:bg-slate-100 border border-slate-700/50 light:border-slate-300 rounded-xl text-slate-200 light:text-slate-900 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 transition-all"
                 />
               </div>
 
               <div>
-                <label className="block text-[10px] uppercase font-bold tracking-wider text-slate-400 mb-1.5">
+                <label className="block text-[10px] uppercase font-bold tracking-wider text-slate-400 light:text-slate-600 mb-1.5">
                   End Date
                 </label>
                 <input
                   type="date"
                   value={studentEndDate}
                   onChange={(e) => setStudentEndDate(e.target.value)}
-                  className="w-full px-3.5 py-2.5 bg-slate-950/50 border border-slate-700/50 rounded-xl text-slate-200 text-sm focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                  className="w-full px-4 py-2.5 bg-slate-950/50 light:bg-slate-100 border border-slate-700/50 light:border-slate-300 rounded-xl text-slate-200 light:text-slate-900 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 transition-all"
                 />
               </div>
             </>
@@ -345,22 +311,11 @@ export default function ReportsPage() {
         </div>
 
         {/* Action Export Buttons */}
-        <div className="flex flex-wrap items-center justify-end gap-3 pt-4 border-t border-slate-800">
-          {activeTab === 'student' && selectedStudentDetails && (
-            <button
-              onClick={handleNativeShare}
-              disabled={loading || reportData.length === 0}
-              className="flex items-center gap-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white font-bold rounded-xl text-xs disabled:opacity-50 transition-all cursor-pointer shadow-lg shadow-indigo-600/20"
-            >
-              <Share2 className="w-4 h-4" />
-              <span>Share Student History</span>
-            </button>
-          )}
-
+        <div className="flex flex-wrap items-center justify-end gap-3 pt-4 border-t border-slate-800 light:border-slate-200">
           <button
             onClick={exportToExcel}
             disabled={loading || reportData.length === 0}
-            className="flex items-center gap-2 px-4 py-2 bg-emerald-600/20 hover:bg-emerald-600/30 text-emerald-400 border border-emerald-500/30 rounded-xl text-xs font-semibold disabled:opacity-50 transition-all cursor-pointer"
+            className="flex items-center gap-2 px-5 py-2.5 bg-emerald-600/20 hover:bg-emerald-600/30 text-emerald-400 border border-emerald-500/30 rounded-xl text-xs font-bold disabled:opacity-50 transition-all cursor-pointer"
           >
             <FileSpreadsheet className="w-4 h-4" />
             <span>Export Excel (.xlsx)</span>
@@ -369,7 +324,7 @@ export default function ReportsPage() {
           <button
             onClick={exportToPDF}
             disabled={loading || reportData.length === 0}
-            className="flex items-center gap-2 px-4 py-2 bg-rose-600/20 hover:bg-rose-600/30 text-rose-400 border border-rose-500/30 rounded-xl text-xs font-semibold disabled:opacity-50 transition-all cursor-pointer"
+            className="flex items-center gap-2 px-5 py-2.5 bg-rose-600/20 hover:bg-rose-600/30 text-rose-400 border border-rose-500/30 rounded-xl text-xs font-bold disabled:opacity-50 transition-all cursor-pointer"
           >
             <Printer className="w-4 h-4" />
             <span>Export PDF (.pdf)</span>
@@ -378,11 +333,11 @@ export default function ReportsPage() {
       </div>
 
       {/* Main Report Data Table Preview */}
-      <div className="glass rounded-2xl border border-slate-800 overflow-hidden shadow-xl">
-        <div className="px-6 py-4 bg-slate-950/30 border-b border-slate-800 flex justify-between items-center">
-          <h4 className="text-sm font-bold text-slate-100 flex items-center gap-2">
+      <div className="glass-card rounded-3xl border border-slate-800 light:border-slate-200 overflow-hidden shadow-xl">
+        <div className="px-6 py-4 bg-slate-950/40 light:bg-slate-100/50 border-b border-slate-800 light:border-slate-200 flex justify-between items-center">
+          <h4 className="text-sm font-bold text-slate-100 light:text-slate-900 flex items-center gap-2">
             <span>Report Preview</span>
-            <span className="text-xs font-normal text-slate-400 font-mono">
+            <span className="text-xs font-normal text-slate-400 light:text-slate-500 font-mono">
               ({reportData.length} records found)
             </span>
           </h4>
@@ -400,36 +355,36 @@ export default function ReportsPage() {
           <div className="overflow-x-auto custom-scrollbar">
             <table className="w-full text-left border-collapse text-xs">
               <thead>
-                <tr className="bg-slate-950/60 border-b border-slate-800 font-bold uppercase tracking-wider text-slate-400">
+                <tr className="bg-slate-950/60 light:bg-slate-100 border-b border-slate-800 light:border-slate-200 font-extrabold uppercase tracking-wider text-slate-400 light:text-slate-600">
                   {activeTab === 'daily' && (
                     <>
-                      <th className="px-5 py-3">Roll Number</th>
-                      <th className="px-5 py-3">Student Name</th>
-                      <th className="px-5 py-3">Dept</th>
-                      <th className="px-5 py-3">Yr / Sec</th>
-                      <th className="px-5 py-3">Daily Status</th>
+                      <th className="px-5 py-3.5">Roll Number</th>
+                      <th className="px-5 py-3.5">Student Name</th>
+                      <th className="px-5 py-3.5">Dept</th>
+                      <th className="px-5 py-3.5">Yr / Sec</th>
+                      <th className="px-5 py-3.5">Daily Status</th>
                     </>
                   )}
                   {activeTab === 'student' && (
                     <>
-                      <th className="px-5 py-3">Date</th>
-                      <th className="px-5 py-3">Attendance Status</th>
+                      <th className="px-5 py-3.5">Date</th>
+                      <th className="px-5 py-3.5">Attendance Status</th>
                     </>
                   )}
                 </tr>
               </thead>
-              <tbody className="divide-y divide-slate-850">
+              <tbody className="divide-y divide-slate-850 light:divide-slate-200">
                 {activeTab === 'daily' &&
                   reportData.map((row, idx) => (
-                    <tr key={idx} className="hover:bg-slate-800/10">
-                      <td className="px-5 py-3 font-mono text-indigo-300">{row.registerNumber}</td>
-                      <td className="px-5 py-3 font-semibold text-slate-100">{row.studentName}</td>
-                      <td className="px-5 py-3 text-slate-400">{row.department}</td>
-                      <td className="px-5 py-3 text-slate-400">{row.year} - {row.section}</td>
-                      <td className="px-5 py-3">
-                        <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
-                          row[1] === 'Present' ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20' :
-                          row[1] === 'Absent' ? 'bg-rose-500/10 text-rose-400 border border-rose-500/20' :
+                    <tr key={idx} className="hover:bg-slate-800/10 light:hover:bg-slate-50 transition-colors">
+                      <td className="px-5 py-3.5 font-mono text-indigo-400 light:text-indigo-600 font-bold">{row.registerNumber}</td>
+                      <td className="px-5 py-3.5 font-bold text-slate-100 light:text-slate-900">{row.studentName}</td>
+                      <td className="px-5 py-3.5 text-slate-400 light:text-slate-600">{row.department}</td>
+                      <td className="px-5 py-3.5 text-slate-400 light:text-slate-600">{row.year} - {row.section}</td>
+                      <td className="px-5 py-3.5">
+                        <span className={`px-2.5 py-1 rounded-full text-[10px] font-bold ${
+                          row[1] === 'Present' ? 'bg-emerald-500/15 text-emerald-400 border border-emerald-500/30' :
+                          row[1] === 'Absent' ? 'bg-rose-500/15 text-rose-400 border border-rose-500/30' :
                           'bg-slate-800 text-slate-300'
                         }`}>
                           {row[1] || 'Unmarked'}
@@ -440,12 +395,12 @@ export default function ReportsPage() {
 
                 {activeTab === 'student' &&
                   reportData.map((row, idx) => (
-                    <tr key={idx} className="hover:bg-slate-800/10">
-                      <td className="px-5 py-3 font-mono text-indigo-300">{row.date}</td>
-                      <td className="px-5 py-3">
-                        <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
-                          row[1] === 'Present' ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20' :
-                          row[1] === 'Absent' ? 'bg-rose-500/10 text-rose-400 border border-rose-500/20' :
+                    <tr key={idx} className="hover:bg-slate-800/10 light:hover:bg-slate-50 transition-colors">
+                      <td className="px-5 py-3.5 font-mono text-indigo-400 light:text-indigo-600 font-bold">{row.date}</td>
+                      <td className="px-5 py-3.5">
+                        <span className={`px-2.5 py-1 rounded-full text-[10px] font-bold ${
+                          row[1] === 'Present' ? 'bg-emerald-500/15 text-emerald-400 border border-emerald-500/30' :
+                          row[1] === 'Absent' ? 'bg-rose-500/15 text-rose-400 border border-rose-500/30' :
                           'bg-slate-800 text-slate-300'
                         }`}>
                           {row[1] || 'Unmarked'}
@@ -458,7 +413,6 @@ export default function ReportsPage() {
           </div>
         )}
       </div>
-
     </div>
   );
 }

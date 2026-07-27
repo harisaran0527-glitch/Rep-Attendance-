@@ -198,7 +198,7 @@ export default function StudentsPage() {
           alert(result.error || 'Bulk upload failed.');
         }
       } else {
-        alert('No valid student data found in the file. Make sure column headers are correct (Roll Number, Student Name, Email, Department, Year, Section).');
+        alert('No valid student data found in the file.');
       }
     } catch (err) {
       console.error(err);
@@ -209,7 +209,6 @@ export default function StudentsPage() {
     }
   };
 
-  // Client side filtering for instant response
   const filteredStudents = students.filter((s) => {
     const q = searchQuery.toLowerCase();
     return (
@@ -221,7 +220,6 @@ export default function StudentsPage() {
     );
   });
 
-  // Client side sorting
   const sortedStudents = [...filteredStudents].sort((a, b) => {
     let valA: any = a[sortField];
     let valB: any = b[sortField];
@@ -239,12 +237,10 @@ export default function StudentsPage() {
     return 0;
   });
 
-  // Reset page to 1 when search or sorting changes
   useEffect(() => {
     setCurrentPage(1);
   }, [searchQuery, sortField, sortDirection]);
 
-  // Client side pagination
   const totalPages = Math.max(1, Math.ceil(sortedStudents.length / itemsPerPage));
   const paginatedStudents = sortedStudents.slice(
     (currentPage - 1) * itemsPerPage,
@@ -261,36 +257,32 @@ export default function StudentsPage() {
   };
 
   return (
-    <div className="space-y-6 max-w-7xl mx-auto">
+    <div className="space-y-6 max-w-7xl mx-auto pb-12">
       {/* Search and Action Bar */}
       <div className="flex flex-col sm:flex-row gap-4 items-stretch sm:items-center justify-between">
-        {/* Search */}
         <div className="relative flex-1 max-w-md">
-          <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-            <Search className="h-4 w-4 text-slate-500" />
-          </div>
+          <Search className="h-4 w-4 text-slate-500 absolute left-3 top-3 pointer-events-none" />
           <input
             type="text"
             placeholder="Search students by roll number, name, department..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            className="block w-full pl-9 pr-4 py-2.5 bg-slate-900/50 border border-slate-700/50 rounded-xl text-slate-100 placeholder-slate-500 focus:outline-none focus:ring-1 focus:ring-indigo-500 text-sm"
+            className="block w-full pl-9 pr-4 py-2.5 bg-slate-950/50 light:bg-slate-100 border border-slate-700/50 light:border-slate-300 rounded-xl text-slate-100 light:text-slate-900 placeholder-slate-500 text-xs focus:outline-none focus:ring-2 focus:ring-indigo-500 transition-all font-medium"
           />
         </div>
 
-        {/* Add button */}
         {!isTeacher && (
           <div className="flex gap-3">
-            <label className="flex items-center justify-center gap-2 px-4 py-2.5 bg-slate-800 hover:bg-slate-700 text-slate-200 font-medium rounded-xl shadow-lg transition-all text-sm cursor-pointer border border-slate-700">
+            <label className="flex items-center justify-center gap-2 px-4 py-2.5 bg-slate-800 light:bg-slate-200 hover:bg-slate-700 light:hover:bg-slate-300 text-slate-200 light:text-slate-800 font-bold rounded-xl shadow-md transition-all text-xs cursor-pointer border border-slate-700 light:border-slate-300">
               <Upload className="w-4 h-4" />
               <span className="hidden sm:inline">Import CSV</span>
               <input type="file" accept=".csv, .xlsx, .xls" className="hidden" onChange={handleFileUpload} />
             </label>
             <button
               onClick={openAddModal}
-              className="flex items-center justify-center gap-2 px-5 py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white font-medium rounded-xl shadow-lg shadow-indigo-600/10 transition-all text-sm cursor-pointer"
+              className="btn-gradient flex items-center justify-center gap-2 px-5 py-2.5 text-white font-bold rounded-xl shadow-lg shadow-indigo-600/30 transition-all text-xs cursor-pointer hover:scale-105"
             >
-              <Plus className="w-4.5 h-4.5" />
+              <Plus className="w-4 h-4" />
               <span>Add Student</span>
             </button>
           </div>
@@ -298,7 +290,7 @@ export default function StudentsPage() {
       </div>
 
       {/* Main Students List Workspace */}
-      <div className="glass rounded-2xl overflow-hidden shadow-xl border border-slate-800">
+      <div className="glass-card rounded-3xl overflow-hidden shadow-xl border border-slate-800 light:border-slate-200">
         {loading ? (
           <div className="flex items-center justify-center py-20">
             <Loader2 className="w-8 h-8 text-indigo-500 animate-spin" />
@@ -306,17 +298,17 @@ export default function StudentsPage() {
         ) : sortedStudents.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-20 px-4 text-center">
             <Users className="w-12 h-12 text-slate-600 mb-4" />
-            <h3 className="text-lg font-semibold text-slate-300">No students found</h3>
-            <p className="text-sm text-slate-500 mt-1 max-w-sm">
+            <h3 className="text-lg font-bold text-slate-300 light:text-slate-700">No students found</h3>
+            <p className="text-xs text-slate-500 mt-1 max-w-sm">
               {searchQuery ? 'Try adjusting your search terms.' : 'Add your first student to get started.'}
             </p>
           </div>
         ) : (
           <div>
             <div className="overflow-x-auto custom-scrollbar">
-              <table className="w-full text-left border-collapse text-sm">
+              <table className="w-full text-left border-collapse text-xs">
                 <thead>
-                  <tr className="bg-slate-950/40 border-b border-slate-800 text-xs font-bold uppercase tracking-wider text-slate-400">
+                  <tr className="bg-slate-950/60 light:bg-slate-100 border-b border-slate-800 light:border-slate-200 font-extrabold uppercase tracking-wider text-slate-400 light:text-slate-600">
                     <th
                       className="px-6 py-4 cursor-pointer hover:text-slate-200 select-none transition-colors"
                       onClick={() => handleSort('registerNumber')}
@@ -366,27 +358,26 @@ export default function StudentsPage() {
                     {!isTeacher && <th className="px-6 py-4 text-right">Actions</th>}
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-slate-800/50">
+                <tbody className="divide-y divide-slate-850 light:divide-slate-200">
                   {paginatedStudents.map((student) => (
                     <tr
                       key={student.id}
-                      className="hover:bg-slate-800/20 transition-colors"
+                      className="hover:bg-slate-800/10 light:hover:bg-slate-50 transition-colors"
                     >
-                      <td className="px-6 py-4 font-mono text-slate-200">
+                      <td className="px-6 py-4 font-mono font-bold text-indigo-400 light:text-indigo-600">
                         {student.registerNumber}
                       </td>
-                      <td className="px-6 py-4 font-medium text-slate-100">
+                      <td className="px-6 py-4 font-bold text-slate-100 light:text-slate-900">
                         {student.studentName}
                       </td>
-                      <td className="px-6 py-4 text-slate-400 text-xs">{student.email || '-'}</td>
-                      <td className="px-6 py-4 text-slate-400">{student.department}</td>
-                      <td className="px-6 py-4 text-slate-400">{student.year} - {student.section}</td>
+                      <td className="px-6 py-4 text-slate-400 light:text-slate-600 text-xs">{student.email || '-'}</td>
+                      <td className="px-6 py-4 text-slate-400 light:text-slate-600 font-medium">{student.department}</td>
+                      <td className="px-6 py-4 text-slate-400 light:text-slate-600 font-medium">{student.year} - {student.section}</td>
                       <td className="px-6 py-4">
                         {student.percentage !== undefined ? (
-                          <span className={`px-2.5 py-1 rounded-full text-xs font-semibold ${
-                            student.percentage >= 75 ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20' :
-                            student.percentage >= 65 ? 'bg-yellow-500/10 text-yellow-400 border border-yellow-500/20' :
-                            'bg-red-500/10 text-red-400 border border-red-500/20'
+                          <span className={`px-2.5 py-1 rounded-full text-xs font-bold ${
+                            student.percentage >= 75 ? 'bg-emerald-500/15 text-emerald-400 border border-emerald-500/30' :
+                            'bg-rose-500/15 text-rose-400 border border-rose-500/30'
                           }`}>
                             {student.percentage}%
                           </span>
@@ -396,20 +387,20 @@ export default function StudentsPage() {
                       </td>
                       {!isTeacher && (
                         <td className="px-6 py-4 text-right">
-                          <div className="flex items-center justify-end gap-3">
+                          <div className="flex items-center justify-end gap-2">
                             <button
                               onClick={() => openEditModal(student)}
-                              className="p-2 text-slate-400 hover:text-indigo-400 rounded-lg hover:bg-indigo-500/10 transition-all cursor-pointer"
+                              className="p-2 text-slate-400 hover:text-indigo-400 rounded-xl hover:bg-indigo-500/10 transition-all cursor-pointer"
                               title="Edit Student"
                             >
-                              <Edit2 className="w-4.5 h-4.5" />
+                              <Edit2 className="w-4 h-4" />
                             </button>
                             <button
                               onClick={() => setDeleteConfirmId(student.id)}
-                              className="p-2 text-slate-400 hover:text-red-400 rounded-lg hover:bg-red-500/10 transition-all cursor-pointer"
+                              className="p-2 text-slate-400 hover:text-rose-400 rounded-xl hover:bg-rose-500/10 transition-all cursor-pointer"
                               title="Delete Student"
                             >
-                              <Trash2 className="w-4.5 h-4.5" />
+                              <Trash2 className="w-4 h-4" />
                             </button>
                           </div>
                         </td>
@@ -421,16 +412,16 @@ export default function StudentsPage() {
             </div>
 
             {/* Pagination Controls Footer */}
-            <div className="px-6 py-4 bg-slate-950/40 border-t border-slate-800 flex flex-col sm:flex-row gap-4 items-center justify-between">
-              <div className="flex items-center gap-3">
-                <span className="text-xs text-slate-400">Show</span>
+            <div className="px-6 py-4 bg-slate-950/40 light:bg-slate-100/50 border-t border-slate-800 light:border-slate-200 flex flex-col sm:flex-row gap-4 items-center justify-between">
+              <div className="flex items-center gap-3 text-xs text-slate-400 light:text-slate-600">
+                <span>Show</span>
                 <select
                   value={itemsPerPage}
                   onChange={(e) => {
                     setItemsPerPage(Number(e.target.value));
                     setCurrentPage(1);
                   }}
-                  className="px-2.5 py-1 bg-slate-900 border border-slate-700/50 rounded-lg text-slate-200 text-xs focus:outline-none focus:ring-1 focus:ring-indigo-500 cursor-pointer"
+                  className="px-2.5 py-1 bg-slate-900 light:bg-white border border-slate-700 light:border-slate-300 rounded-xl text-slate-200 light:text-slate-800 font-bold focus:outline-none cursor-pointer"
                 >
                   {[5, 10, 25, 50].map((size) => (
                     <option key={size} value={size}>
@@ -438,7 +429,7 @@ export default function StudentsPage() {
                     </option>
                   ))}
                 </select>
-                <span className="text-xs text-slate-500 font-medium">
+                <span>
                   Showing {sortedStudents.length === 0 ? 0 : (currentPage - 1) * itemsPerPage + 1} to{' '}
                   {Math.min(currentPage * itemsPerPage, sortedStudents.length)} of {sortedStudents.length} students
                 </span>
@@ -449,7 +440,7 @@ export default function StudentsPage() {
                   <button
                     disabled={currentPage === 1}
                     onClick={() => setCurrentPage(currentPage - 1)}
-                    className="px-3 py-1.5 bg-slate-900 border border-slate-700/50 hover:bg-slate-800 disabled:opacity-50 disabled:hover:bg-slate-900 text-slate-300 rounded-xl text-xs font-semibold transition-colors cursor-pointer"
+                    className="px-3 py-1.5 bg-slate-800 light:bg-slate-200 disabled:opacity-50 text-slate-300 light:text-slate-700 rounded-xl text-xs font-bold transition-all cursor-pointer"
                   >
                     Previous
                   </button>
@@ -459,8 +450,8 @@ export default function StudentsPage() {
                       onClick={() => setCurrentPage(pg)}
                       className={`w-8 h-8 flex items-center justify-center rounded-xl text-xs font-bold transition-all cursor-pointer ${
                         currentPage === pg
-                          ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-600/10'
-                          : 'bg-slate-900/50 text-slate-400 hover:text-slate-200 border border-slate-800'
+                          ? 'btn-gradient shadow-md text-white'
+                          : 'bg-slate-900/50 light:bg-white text-slate-400 light:text-slate-700 hover:text-slate-200 border border-slate-800 light:border-slate-300'
                       }`}
                     >
                       {pg}
@@ -469,7 +460,7 @@ export default function StudentsPage() {
                   <button
                     disabled={currentPage === totalPages}
                     onClick={() => setCurrentPage(currentPage + 1)}
-                    className="px-3 py-1.5 bg-slate-900 border border-slate-700/50 hover:bg-slate-800 disabled:opacity-50 disabled:hover:bg-slate-900 text-slate-300 rounded-xl text-xs font-semibold transition-colors cursor-pointer"
+                    className="px-3 py-1.5 bg-slate-800 light:bg-slate-200 disabled:opacity-50 text-slate-300 light:text-slate-700 rounded-xl text-xs font-bold transition-all cursor-pointer"
                   >
                     Next
                   </button>
@@ -482,34 +473,34 @@ export default function StudentsPage() {
 
       {/* Add / Edit Student Modal */}
       {isModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
-          <div className="relative w-full max-w-md bg-slate-900 border border-slate-800 rounded-2xl shadow-2xl p-6 overflow-hidden">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm">
+          <div className="relative w-full max-w-md bg-slate-900 light:bg-white border border-slate-800 light:border-slate-300 rounded-3xl shadow-2xl p-6 overflow-hidden space-y-4">
             <button
               onClick={() => setIsModalOpen(false)}
-              className="absolute top-4 right-4 text-slate-400 hover:text-slate-100 p-1.5 hover:bg-slate-800 rounded-lg transition-colors"
+              className="absolute top-4 right-4 text-slate-400 p-1.5 rounded-xl cursor-pointer"
             >
               <X className="w-5 h-5" />
             </button>
 
-            <div className="flex items-center gap-3 mb-6">
-              <div className="flex items-center justify-center w-10 h-10 rounded-xl bg-indigo-600/10 border border-indigo-500/20 text-indigo-400">
+            <div className="flex items-center gap-3">
+              <div className="p-2.5 rounded-2xl bg-indigo-600/20 text-indigo-400 border border-indigo-500/30">
                 <UserPlus className="w-5 h-5" />
               </div>
-              <h3 className="text-lg font-bold text-slate-100">
+              <h3 className="text-base font-bold text-slate-100 light:text-slate-900">
                 {editingStudent ? 'Edit Student Details' : 'Add New Student'}
               </h3>
             </div>
 
             {modalError && (
-              <div className="mb-4 flex items-center gap-3 p-3.5 rounded-xl bg-red-950/40 border border-red-500/30 text-red-200 text-xs">
-                <AlertCircle className="w-4.5 h-4.5 text-red-400 shrink-0" />
+              <div className="p-3.5 rounded-2xl bg-rose-950/40 border border-rose-500/30 text-rose-300 text-xs font-bold flex items-center gap-2">
+                <AlertCircle className="w-4 h-4 text-rose-400 shrink-0" />
                 <span>{modalError}</span>
               </div>
             )}
 
-            <form onSubmit={handleModalSubmit} className="space-y-4">
+            <form onSubmit={handleModalSubmit} className="space-y-4 text-xs">
               <div>
-                <label className="block text-xs font-semibold uppercase tracking-wider text-slate-400 mb-1.5">
+                <label className="block text-[10px] font-extrabold uppercase tracking-wider text-slate-400 light:text-slate-600 mb-1">
                   Roll Number *
                 </label>
                 <input
@@ -518,12 +509,12 @@ export default function StudentsPage() {
                   value={registerNumber}
                   onChange={(e) => setRegisterNumber(e.target.value)}
                   placeholder="e.g. 21CS001"
-                  className="block w-full px-3.5 py-2.5 bg-slate-950/50 border border-slate-700/50 rounded-xl text-slate-200 focus:outline-none focus:ring-1 focus:ring-indigo-500 text-sm"
+                  className="w-full px-3.5 py-2.5 bg-slate-950/50 light:bg-slate-100 border border-slate-800 light:border-slate-300 rounded-xl text-slate-100 light:text-slate-900 text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-indigo-500"
                 />
               </div>
 
               <div>
-                <label className="block text-xs font-semibold uppercase tracking-wider text-slate-400 mb-1.5">
+                <label className="block text-[10px] font-extrabold uppercase tracking-wider text-slate-400 light:text-slate-600 mb-1">
                   Student Name *
                 </label>
                 <input
@@ -532,12 +523,12 @@ export default function StudentsPage() {
                   value={studentName}
                   onChange={(e) => setStudentName(e.target.value)}
                   placeholder="e.g. John Doe"
-                  className="block w-full px-3.5 py-2.5 bg-slate-950/50 border border-slate-700/50 rounded-xl text-slate-200 focus:outline-none focus:ring-1 focus:ring-indigo-500 text-sm"
+                  className="w-full px-3.5 py-2.5 bg-slate-950/50 light:bg-slate-100 border border-slate-800 light:border-slate-300 rounded-xl text-slate-100 light:text-slate-900 text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-indigo-500"
                 />
               </div>
 
               <div>
-                <label className="block text-xs font-semibold uppercase tracking-wider text-slate-400 mb-1.5">
+                <label className="block text-[10px] font-extrabold uppercase tracking-wider text-slate-400 light:text-slate-600 mb-1">
                   Email *
                 </label>
                 <input
@@ -546,12 +537,12 @@ export default function StudentsPage() {
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   placeholder="john@example.com"
-                  className="block w-full px-3.5 py-2.5 bg-slate-950/50 border border-slate-700/50 rounded-xl text-slate-200 focus:outline-none focus:ring-1 focus:ring-indigo-500 text-sm"
+                  className="w-full px-3.5 py-2.5 bg-slate-950/50 light:bg-slate-100 border border-slate-800 light:border-slate-300 rounded-xl text-slate-100 light:text-slate-900 text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-indigo-500"
                 />
               </div>
 
               <div>
-                <label className="block text-xs font-semibold uppercase tracking-wider text-slate-400 mb-1.5">
+                <label className="block text-[10px] font-extrabold uppercase tracking-wider text-slate-400 light:text-slate-600 mb-1">
                   Password {editingStudent ? '(Leave blank to keep current)' : '*'}
                 </label>
                 <div className="relative">
@@ -561,22 +552,21 @@ export default function StudentsPage() {
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
                     placeholder={editingStudent ? "••••••••" : "Enter password"}
-                    className="block w-full pl-3.5 pr-11 py-2.5 bg-slate-950/50 border border-slate-700/50 rounded-xl text-slate-200 focus:outline-none focus:ring-1 focus:ring-indigo-500 text-sm"
+                    className="w-full px-3.5 pr-10 py-2.5 bg-slate-950/50 light:bg-slate-100 border border-slate-800 light:border-slate-300 rounded-xl text-slate-100 light:text-slate-900 text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-indigo-500"
                   />
                   <button
                     type="button"
                     onClick={() => setShowPasswordModal(!showPasswordModal)}
-                    className="absolute inset-y-0 right-0 pr-3.5 flex items-center text-slate-400 hover:text-slate-200 cursor-pointer"
-                    title={showPasswordModal ? "Hide password" : "Show password"}
+                    className="absolute inset-y-0 right-0 pr-3 flex items-center text-slate-400 cursor-pointer"
                   >
-                    {showPasswordModal ? <EyeOff className="w-4.5 h-4.5" /> : <Eye className="w-4.5 h-4.5" />}
+                    {showPasswordModal ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                   </button>
                 </div>
               </div>
 
-              <div className="grid grid-cols-3 gap-4">
+              <div className="grid grid-cols-3 gap-3">
                 <div>
-                  <label className="block text-xs font-semibold uppercase tracking-wider text-slate-400 mb-1.5">
+                  <label className="block text-[10px] font-extrabold uppercase tracking-wider text-slate-400 light:text-slate-600 mb-1">
                     Dept *
                   </label>
                   <input
@@ -585,12 +575,12 @@ export default function StudentsPage() {
                     value={department}
                     onChange={(e) => setDepartment(e.target.value)}
                     placeholder="CSE"
-                    className="block w-full px-3.5 py-2.5 bg-slate-950/50 border border-slate-700/50 rounded-xl text-slate-200 focus:outline-none focus:ring-1 focus:ring-indigo-500 text-sm"
+                    className="w-full px-3 py-2 bg-slate-950/50 light:bg-slate-100 border border-slate-800 light:border-slate-300 rounded-xl text-slate-100 light:text-slate-900 text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-indigo-500"
                   />
                 </div>
 
                 <div>
-                  <label className="block text-xs font-semibold uppercase tracking-wider text-slate-400 mb-1.5">
+                  <label className="block text-[10px] font-extrabold uppercase tracking-wider text-slate-400 light:text-slate-600 mb-1">
                     Year *
                   </label>
                   <input
@@ -599,12 +589,12 @@ export default function StudentsPage() {
                     value={year}
                     onChange={(e) => setYear(e.target.value)}
                     placeholder="III"
-                    className="block w-full px-3.5 py-2.5 bg-slate-950/50 border border-slate-700/50 rounded-xl text-slate-200 focus:outline-none focus:ring-1 focus:ring-indigo-500 text-sm"
+                    className="w-full px-3 py-2 bg-slate-950/50 light:bg-slate-100 border border-slate-800 light:border-slate-300 rounded-xl text-slate-100 light:text-slate-900 text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-indigo-500"
                   />
                 </div>
 
                 <div>
-                  <label className="block text-xs font-semibold uppercase tracking-wider text-slate-400 mb-1.5">
+                  <label className="block text-[10px] font-extrabold uppercase tracking-wider text-slate-400 light:text-slate-600 mb-1">
                     Sec *
                   </label>
                   <input
@@ -613,23 +603,23 @@ export default function StudentsPage() {
                     value={section}
                     onChange={(e) => setSection(e.target.value)}
                     placeholder="A"
-                    className="block w-full px-3.5 py-2.5 bg-slate-950/50 border border-slate-700/50 rounded-xl text-slate-200 focus:outline-none focus:ring-1 focus:ring-indigo-500 text-sm"
+                    className="w-full px-3 py-2 bg-slate-950/50 light:bg-slate-100 border border-slate-800 light:border-slate-300 rounded-xl text-slate-100 light:text-slate-900 text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-indigo-500"
                   />
                 </div>
               </div>
 
-              <div className="pt-4 flex gap-3">
+              <div className="pt-2 flex gap-3">
                 <button
                   type="button"
                   onClick={() => setIsModalOpen(false)}
-                  className="flex-1 py-2.5 border border-slate-700 hover:bg-slate-800 text-slate-300 font-medium rounded-xl text-sm transition-colors cursor-pointer"
+                  className="flex-1 py-2.5 border border-slate-700 light:border-slate-300 text-slate-300 light:text-slate-700 font-bold rounded-xl text-xs cursor-pointer"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
                   disabled={submitting}
-                  className="flex-1 py-2.5 bg-indigo-600 hover:bg-indigo-500 disabled:bg-indigo-600/50 text-white font-medium rounded-xl text-sm transition-colors flex items-center justify-center gap-1.5 cursor-pointer"
+                  className="btn-gradient flex-1 py-2.5 text-white font-bold rounded-xl text-xs flex items-center justify-center gap-1.5 cursor-pointer"
                 >
                   {submitting ? (
                     <>
@@ -648,22 +638,22 @@ export default function StudentsPage() {
 
       {/* Delete Confirmation Modal */}
       {deleteConfirmId !== null && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
-          <div className="w-full max-w-sm bg-slate-900 border border-slate-800 rounded-2xl p-6 shadow-2xl">
-            <h3 className="text-lg font-bold text-slate-100">Delete Student?</h3>
-            <p className="text-slate-400 text-sm mt-2">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm">
+          <div className="w-full max-w-sm bg-slate-900 light:bg-white border border-slate-800 light:border-slate-300 rounded-3xl p-6 shadow-2xl space-y-4">
+            <h3 className="text-base font-bold text-slate-100 light:text-slate-900">Delete Student?</h3>
+            <p className="text-slate-400 light:text-slate-600 text-xs leading-relaxed">
               Are you sure you want to delete this student? All attendance records belonging to this student will also be permanently deleted.
             </p>
-            <div className="mt-6 flex gap-3">
+            <div className="flex gap-3 pt-2">
               <button
                 onClick={() => setDeleteConfirmId(null)}
-                className="flex-1 py-2.5 border border-slate-700 hover:bg-slate-800 text-slate-300 font-medium rounded-xl text-sm transition-colors cursor-pointer"
+                className="flex-1 py-2.5 border border-slate-700 light:border-slate-300 text-slate-300 light:text-slate-700 font-bold rounded-xl text-xs cursor-pointer"
               >
                 Cancel
               </button>
               <button
                 onClick={() => handleDelete(deleteConfirmId)}
-                className="flex-1 py-2.5 bg-red-600 hover:bg-red-500 text-white font-medium rounded-xl text-sm transition-colors cursor-pointer"
+                className="flex-1 py-2.5 bg-rose-600 hover:bg-rose-500 text-white font-bold rounded-xl text-xs cursor-pointer"
               >
                 Confirm Delete
               </button>

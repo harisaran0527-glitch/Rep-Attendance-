@@ -145,7 +145,7 @@ export default function SettingsPage() {
         if (res.status === 'Sent') {
           setTestSuccess('Test email sent successfully via SMTP!');
         } else {
-          setTestSuccess('Test email simulated successfully! (SMTP details were incomplete)');
+          setTestSuccess('Test email simulated successfully!');
         }
       } else {
         setTestError(res.error || 'SMTP Connection failed. Verify credentials.');
@@ -177,7 +177,6 @@ export default function SettingsPage() {
         setTeacherDept('CSE');
         setSuccessMsg('Teacher added successfully!');
         setTimeout(() => setSuccessMsg(null), 3000);
-        // Refresh teacher list
         const tList = await getTeachersAction();
         setTeachers(tList);
       } else {
@@ -216,43 +215,43 @@ export default function SettingsPage() {
   }
 
   return (
-    <div className="max-w-5xl mx-auto space-y-8">
+    <div className="max-w-5xl mx-auto space-y-6 pb-12">
       {/* Page Header Tabs */}
-      <div className="flex border-b border-slate-800 space-x-6 text-sm font-semibold mb-6">
+      <div className="flex bg-slate-900/60 light:bg-slate-200/80 p-1.5 rounded-2xl border border-slate-800 light:border-slate-300 w-fit">
         <button
           onClick={() => setActiveTab('general')}
-          className={`pb-3 transition-colors cursor-pointer border-b-2 flex items-center gap-2 ${
+          className={`flex items-center gap-2 px-5 py-2.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
             activeTab === 'general'
-              ? 'border-indigo-500 text-indigo-400'
-              : 'border-transparent text-slate-400 hover:text-slate-200'
+              ? 'btn-gradient shadow-md'
+              : 'text-slate-400 light:text-slate-700'
           }`}
         >
           <Sliders className="w-4 h-4" />
-          General Settings
+          <span>General Settings</span>
         </button>
         <button
           onClick={() => setActiveTab('teachers')}
-          className={`pb-3 transition-colors cursor-pointer border-b-2 flex items-center gap-2 ${
+          className={`flex items-center gap-2 px-5 py-2.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
             activeTab === 'teachers'
-              ? 'border-indigo-500 text-indigo-400'
-              : 'border-transparent text-slate-400 hover:text-slate-200'
+              ? 'btn-gradient shadow-md'
+              : 'text-slate-400 light:text-slate-700'
           }`}
         >
           <Users className="w-4 h-4" />
-          Teacher Accounts ({teachers.length})
+          <span>Teacher Accounts ({teachers.length})</span>
         </button>
       </div>
 
       {successMsg && (
-        <div className="flex items-center gap-3 p-4 rounded-xl bg-emerald-950/40 border border-emerald-500/30 text-emerald-200 text-sm">
-          <CheckCircle className="w-5 h-5 text-emerald-400 shrink-0" />
+        <div className="flex items-center gap-3 p-4 rounded-2xl bg-emerald-500/15 border border-emerald-500/30 text-emerald-400 text-xs font-bold">
+          <CheckCircle className="w-4 h-4 text-emerald-400 shrink-0" />
           <span>{successMsg}</span>
         </div>
       )}
 
       {errorMsg && (
-        <div className="flex items-center gap-3 p-4 rounded-xl bg-rose-950/40 border border-rose-500/30 text-rose-200 text-sm">
-          <AlertCircle className="w-5 h-5 text-rose-400 shrink-0" />
+        <div className="flex items-center gap-3 p-4 rounded-2xl bg-rose-500/15 border border-rose-500/30 text-rose-400 text-xs font-bold">
+          <AlertCircle className="w-4 h-4 text-rose-400 shrink-0" />
           <span>{errorMsg}</span>
         </div>
       )}
@@ -261,16 +260,15 @@ export default function SettingsPage() {
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
           {/* Main Settings Form */}
           <div className="lg:col-span-2 space-y-6">
-            <div className="glass p-6 rounded-2xl border border-slate-800">
-              <h3 className="text-lg font-bold text-slate-100 flex items-center gap-2 mb-6">
+            <div className="glass-card p-6 rounded-3xl">
+              <h3 className="text-base font-bold text-slate-100 light:text-slate-900 flex items-center gap-2 mb-6">
                 <Sliders className="w-5 h-5 text-indigo-400" />
-                <span>General Settings</span>
+                <span>General Configurations</span>
               </h3>
 
               <form onSubmit={handleSave} className="space-y-6">
-                {/* Threshold Percentage */}
                 <div>
-                  <label className="block text-xs font-bold uppercase tracking-wider text-slate-400 mb-1.5">
+                  <label className="block text-[10px] font-extrabold uppercase tracking-wider text-slate-400 light:text-slate-600 mb-1.5">
                     Low Attendance Threshold (%) *
                   </label>
                   <div className="relative">
@@ -283,20 +281,16 @@ export default function SettingsPage() {
                       value={lowThreshold}
                       onChange={(e) => setLowThreshold(parseFloat(e.target.value))}
                       placeholder="e.g. 75"
-                      className="block w-full px-3.5 py-2.5 bg-slate-950/50 border border-slate-700/50 rounded-xl text-slate-200 focus:outline-none focus:ring-1 focus:ring-indigo-500 text-sm font-semibold"
+                      className="block w-full px-4 py-2.5 bg-slate-950/50 light:bg-slate-100 border border-slate-700/50 light:border-slate-300 rounded-xl text-slate-200 light:text-slate-900 focus:outline-none focus:ring-2 focus:ring-indigo-500 text-xs font-bold"
                     />
                     <span className="absolute right-3.5 top-1/2 -translate-y-1/2 text-xs font-bold text-slate-500">
                       %
                     </span>
                   </div>
-                  <p className="text-[10px] text-slate-500 mt-1">
-                    Students falling below this percentage will be automatically emailed warnings.
-                  </p>
                 </div>
 
-                {/* College Opening Date */}
                 <div>
-                  <label className="block text-xs font-bold uppercase tracking-wider text-slate-400 mb-1.5">
+                  <label className="block text-[10px] font-extrabold uppercase tracking-wider text-slate-400 light:text-slate-600 mb-1.5">
                     College Opening Date (First Day of Term) *
                   </label>
                   <input
@@ -304,34 +298,31 @@ export default function SettingsPage() {
                     required
                     value={collegeOpeningDate}
                     onChange={(e) => setCollegeOpeningDate(e.target.value)}
-                    className="block w-full px-3.5 py-2.5 bg-slate-950/50 border border-slate-700/50 rounded-xl text-slate-200 focus:outline-none focus:ring-1 focus:ring-indigo-500 text-sm font-semibold cursor-pointer"
+                    className="block w-full px-4 py-2.5 bg-slate-950/50 light:bg-slate-100 border border-slate-700/50 light:border-slate-300 rounded-xl text-slate-200 light:text-slate-900 text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-indigo-500 cursor-pointer"
                   />
-                  <p className="text-[10px] text-slate-500 mt-1">
-                    Baseline start date used for calculating cumulative working days and overall attendance percentages.
-                  </p>
                 </div>
 
-                <div className="border-t border-slate-800 pt-6">
-                  <h4 className="text-sm font-bold text-slate-200 flex items-center gap-2 mb-4">
+                <div className="border-t border-slate-800 light:border-slate-200 pt-6">
+                  <h4 className="text-xs font-bold uppercase tracking-wider text-slate-300 light:text-slate-700 flex items-center gap-2 mb-4">
                     <Mail className="w-4 h-4 text-indigo-400" />
                     <span>SMTP Provider Credentials</span>
                   </h4>
 
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <div>
-                      <label className="block text-[10px] uppercase font-bold text-slate-400 mb-1.5">
-                        SMTP Server Host
+                      <label className="block text-[10px] font-extrabold uppercase tracking-wider text-slate-400 light:text-slate-600 mb-1.5">
+                        SMTP Host
                       </label>
                       <input
                         type="text"
                         value={host}
                         onChange={(e) => setHost(e.target.value)}
                         placeholder="smtp.gmail.com"
-                        className="block w-full px-3.5 py-2 bg-slate-950/50 border border-slate-700/50 rounded-xl text-slate-200 focus:outline-none focus:ring-1 focus:ring-indigo-500 text-xs"
+                        className="block w-full px-3.5 py-2.5 bg-slate-950/50 light:bg-slate-100 border border-slate-700/50 light:border-slate-300 rounded-xl text-slate-200 light:text-slate-900 text-xs font-medium"
                       />
                     </div>
                     <div>
-                      <label className="block text-[10px] uppercase font-bold text-slate-400 mb-1.5">
+                      <label className="block text-[10px] font-extrabold uppercase tracking-wider text-slate-400 light:text-slate-600 mb-1.5">
                         SMTP Port
                       </label>
                       <input
@@ -339,7 +330,7 @@ export default function SettingsPage() {
                         value={port}
                         onChange={(e) => setPort(parseInt(e.target.value))}
                         placeholder="587"
-                        className="block w-full px-3.5 py-2 bg-slate-950/50 border border-slate-700/50 rounded-xl text-slate-200 focus:outline-none focus:ring-1 focus:ring-indigo-500 text-xs"
+                        className="block w-full px-3.5 py-2.5 bg-slate-950/50 light:bg-slate-100 border border-slate-700/50 light:border-slate-300 rounded-xl text-slate-200 light:text-slate-900 text-xs font-medium"
                       />
                     </div>
                   </div>
@@ -350,90 +341,56 @@ export default function SettingsPage() {
                       id="secure"
                       checked={secure}
                       onChange={(e) => setSecure(e.target.checked)}
-                      className="w-4 h-4 accent-indigo-650 cursor-pointer"
+                      className="w-4 h-4 accent-indigo-600 cursor-pointer"
                     />
-                    <label htmlFor="secure" className="text-xs text-slate-300 font-semibold cursor-pointer">
+                    <label htmlFor="secure" className="text-xs text-slate-300 light:text-slate-700 font-semibold cursor-pointer">
                       Use SSL/TLS Secure Connection (Port 465)
                     </label>
                   </div>
 
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mt-6">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mt-4">
                     <div>
-                      <label className="block text-[10px] uppercase font-bold text-slate-400 mb-1.5">
-                        Username / Email Address
+                      <label className="block text-[10px] font-extrabold uppercase tracking-wider text-slate-400 light:text-slate-600 mb-1.5">
+                        Username / Email
                       </label>
                       <input
                         type="text"
                         value={user}
                         onChange={(e) => setUser(e.target.value)}
-                        placeholder="e.g. portal@gmail.com"
-                        className="block w-full px-3.5 py-2 bg-slate-950/50 border border-slate-700/50 rounded-xl text-slate-200 focus:outline-none focus:ring-1 focus:ring-indigo-500 text-xs"
+                        placeholder="portal@gmail.com"
+                        className="block w-full px-3.5 py-2.5 bg-slate-950/50 light:bg-slate-100 border border-slate-700/50 light:border-slate-300 rounded-xl text-slate-200 light:text-slate-900 text-xs font-medium"
                       />
                     </div>
                     <div>
-                      <label className="block text-[10px] uppercase font-bold text-slate-400 mb-1.5">
-                        SMTP Password (or App Password)
+                      <label className="block text-[10px] font-extrabold uppercase tracking-wider text-slate-400 light:text-slate-600 mb-1.5">
+                        SMTP App Password
                       </label>
                       <input
                         type="password"
                         value={password}
                         onChange={(e) => setPassword(e.target.value)}
                         placeholder="••••••••••••••••"
-                        className="block w-full px-3.5 py-2 bg-slate-950/50 border border-slate-700/50 rounded-xl text-slate-200 focus:outline-none focus:ring-1 focus:ring-indigo-500 text-xs"
+                        className="block w-full px-3.5 py-2.5 bg-slate-950/50 light:bg-slate-100 border border-slate-700/50 light:border-slate-300 rounded-xl text-slate-200 light:text-slate-900 text-xs font-medium"
                       />
                     </div>
                   </div>
                 </div>
 
-                <div className="border-t border-slate-800 pt-6">
-                  <h4 className="text-sm font-bold text-slate-200 flex items-center gap-2 mb-4">
-                    <User className="w-4 h-4 text-indigo-400" />
-                    <span>Sender Details</span>
-                  </h4>
-
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                    <div>
-                      <label className="block text-[10px] uppercase font-bold text-slate-400 mb-1.5">
-                        Sender Name
-                      </label>
-                      <input
-                        type="text"
-                        value={senderName}
-                        onChange={(e) => setSenderName(e.target.value)}
-                        placeholder="Department Head / College Admin"
-                        className="block w-full px-3.5 py-2 bg-slate-950/50 border border-slate-700/50 rounded-xl text-slate-200 focus:outline-none focus:ring-1 focus:ring-indigo-500 text-xs"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-[10px] uppercase font-bold text-slate-400 mb-1.5">
-                        Sender Email (Optional)
-                      </label>
-                      <input
-                        type="email"
-                        value={senderEmail}
-                        onChange={(e) => setSenderEmail(e.target.value)}
-                        placeholder="e.g. portal@gmail.com"
-                        className="block w-full px-3.5 py-2 bg-slate-950/50 border border-slate-700/50 rounded-xl text-slate-200 focus:outline-none focus:ring-1 focus:ring-indigo-500 text-xs"
-                      />
-                    </div>
-                  </div>
-                </div>
-
-                <div className="pt-4 border-t border-slate-800 flex justify-end">
+                <div className="pt-4 border-t border-slate-800 light:border-slate-200 flex justify-end">
                   <button
                     type="submit"
                     disabled={saving}
-                    className="flex items-center gap-2 px-5 py-2.5 bg-indigo-600 hover:bg-indigo-500 disabled:bg-indigo-600/50 text-white font-medium rounded-xl shadow-lg shadow-indigo-600/10 transition-colors text-sm cursor-pointer"
+                    className="btn-gradient flex items-center gap-2 px-6 py-2.5 text-white font-bold rounded-xl shadow-lg shadow-indigo-600/30 text-xs cursor-pointer"
                   >
                     {saving ? (
                       <>
-                        <Loader2 className="w-4.5 h-4.5 animate-spin" />
-                        <span>Saving Settings...</span>
+                        <Loader2 className="w-4 h-4 animate-spin" />
+                        <span>Saving...</span>
                       </>
                     ) : (
                       <>
-                        <Save className="w-4.5 h-4.5" />
-                        <span>Save Config</span>
+                        <Save className="w-4 h-4" />
+                        <span>Save Settings</span>
                       </>
                     )}
                   </button>
@@ -444,58 +401,55 @@ export default function SettingsPage() {
 
           {/* Sidebar Diagnostics Column */}
           <div className="space-y-6">
-            <div className="glass p-6 rounded-2xl border border-slate-800">
-              <h3 className="text-lg font-bold text-slate-100 flex items-center gap-2 mb-4">
+            <div className="glass-card p-6 rounded-3xl">
+              <h3 className="text-base font-bold text-slate-100 light:text-slate-900 flex items-center gap-2 mb-4">
                 <Shield className="w-5 h-5 text-indigo-400" />
                 <span>Email Diagnostics</span>
               </h3>
-              <p className="text-xs text-slate-400 mb-6 leading-relaxed">
-                Verify your SMTP configurations by triggering a test warning email to any email address.
-              </p>
 
               {testSuccess && (
-                <div className="mb-4 flex items-start gap-2.5 p-3 rounded-xl bg-emerald-950/40 border border-emerald-500/30 text-emerald-200 text-xs">
-                  <CheckCircle className="w-4.5 h-4.5 text-emerald-400 shrink-0 mt-0.5" />
+                <div className="mb-4 flex items-start gap-2.5 p-3 rounded-xl bg-emerald-500/15 border border-emerald-500/30 text-emerald-400 text-xs font-bold">
+                  <CheckCircle className="w-4 h-4 text-emerald-400 shrink-0 mt-0.5" />
                   <span>{testSuccess}</span>
                 </div>
               )}
 
               {testError && (
-                <div className="mb-4 flex items-start gap-2.5 p-3 rounded-xl bg-rose-950/40 border border-rose-500/30 text-rose-200 text-xs">
-                  <AlertCircle className="w-4.5 h-4.5 text-rose-400 shrink-0 mt-0.5" />
+                <div className="mb-4 flex items-start gap-2.5 p-3 rounded-xl bg-rose-500/15 border border-rose-500/30 text-rose-400 text-xs font-bold">
+                  <AlertCircle className="w-4 h-4 text-rose-400 shrink-0 mt-0.5" />
                   <span className="break-all">{testError}</span>
                 </div>
               )}
 
               <form onSubmit={handleTestEmail} className="space-y-4">
                 <div>
-                  <label className="block text-[10px] uppercase font-bold text-slate-400 mb-1.5">
-                    Test Destination Email
+                  <label className="block text-[10px] font-extrabold uppercase tracking-wider text-slate-400 light:text-slate-600 mb-1.5">
+                    Destination Email
                   </label>
                   <input
                     type="email"
                     required
                     value={testEmail}
                     onChange={(e) => setTestEmail(e.target.value)}
-                    placeholder="e.g. name@domain.com"
-                    className="block w-full px-3.5 py-2.5 bg-slate-950/50 border border-slate-700/50 rounded-xl text-slate-200 focus:outline-none focus:ring-1 focus:ring-indigo-500 text-xs"
+                    placeholder="name@domain.com"
+                    className="block w-full px-3.5 py-2.5 bg-slate-950/50 light:bg-slate-100 border border-slate-700/50 light:border-slate-300 rounded-xl text-slate-200 light:text-slate-900 text-xs font-medium"
                   />
                 </div>
 
                 <button
                   type="submit"
                   disabled={testing || !testEmail}
-                  className="w-full flex items-center justify-center gap-2 px-4 py-2.5 bg-slate-800 hover:bg-slate-700 disabled:bg-slate-800/50 text-slate-200 font-semibold rounded-xl text-xs transition-colors cursor-pointer"
+                  className="w-full flex items-center justify-center gap-2 px-4 py-2.5 bg-slate-800 light:bg-slate-200 hover:bg-slate-700 text-slate-200 light:text-slate-800 font-bold rounded-xl text-xs transition-all cursor-pointer"
                 >
                   {testing ? (
                     <>
-                      <Loader2 className="w-4.5 h-4.5 animate-spin" />
-                      <span>Sending Test...</span>
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                      <span>Sending...</span>
                     </>
                   ) : (
                     <>
-                      <Send className="w-4.5 h-4.5" />
-                      <span>Send Diagnostics Email</span>
+                      <Send className="w-4 h-4" />
+                      <span>Send Diagnostics</span>
                     </>
                   )}
                 </button>
@@ -508,25 +462,21 @@ export default function SettingsPage() {
       {activeTab === 'teachers' && (
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
           {/* Add Teacher Form */}
-          <div className="glass p-6 rounded-2xl border border-slate-800 h-fit">
-            <h3 className="text-lg font-bold text-slate-100 flex items-center gap-2 mb-4">
+          <div className="glass-card p-6 rounded-3xl h-fit">
+            <h3 className="text-base font-bold text-slate-100 light:text-slate-900 flex items-center gap-2 mb-4">
               <UserPlus className="w-5 h-5 text-indigo-400" />
               <span>Create Teacher</span>
             </h3>
-            <p className="text-xs text-slate-400 mb-6">
-              Create an instructor account. Teachers can log in, view students, and record attendance.
-            </p>
 
             {teacherError && (
-              <div className="mb-4 p-3.5 rounded-xl bg-rose-950/40 border border-rose-500/30 text-rose-200 text-xs flex items-center gap-2">
-                <AlertCircle className="w-4.5 h-4.5 text-rose-450 shrink-0" />
-                <span>{teacherError}</span>
+              <div className="mb-4 p-3 rounded-xl bg-rose-500/15 border border-rose-500/30 text-rose-400 text-xs font-bold">
+                {teacherError}
               </div>
             )}
 
-            <form onSubmit={handleAddTeacher} className="space-y-4">
+            <form onSubmit={handleAddTeacher} className="space-y-4 text-xs">
               <div>
-                <label className="block text-[10px] uppercase font-bold text-slate-400 mb-1.5">
+                <label className="block text-[10px] font-extrabold uppercase tracking-wider text-slate-400 light:text-slate-600 mb-1">
                   Instructor Name *
                 </label>
                 <input
@@ -534,28 +484,28 @@ export default function SettingsPage() {
                   required
                   value={teacherName}
                   onChange={(e) => setTeacherName(e.target.value)}
-                  placeholder="e.g. Prof. Sarah Connor"
-                  className="block w-full px-3.5 py-2.5 bg-slate-950/50 border border-slate-700/50 rounded-xl text-slate-200 focus:outline-none focus:ring-1 focus:ring-indigo-500 text-xs"
+                  placeholder="Prof. Sarah Connor"
+                  className="w-full px-3.5 py-2.5 bg-slate-950/50 light:bg-slate-100 border border-slate-700/50 light:border-slate-300 rounded-xl text-slate-200 light:text-slate-900 text-xs font-semibold"
                 />
               </div>
 
               <div>
-                <label className="block text-[10px] uppercase font-bold text-slate-400 mb-1.5">
-                  Registered Email *
+                <label className="block text-[10px] font-extrabold uppercase tracking-wider text-slate-400 light:text-slate-600 mb-1">
+                  Email *
                 </label>
                 <input
                   type="email"
                   required
                   value={teacherEmail}
                   onChange={(e) => setTeacherEmail(e.target.value)}
-                  placeholder="e.g. sarah@college.edu"
-                  className="block w-full px-3.5 py-2.5 bg-slate-950/50 border border-slate-700/50 rounded-xl text-slate-200 focus:outline-none focus:ring-1 focus:ring-indigo-500 text-xs"
+                  placeholder="sarah@college.edu"
+                  className="w-full px-3.5 py-2.5 bg-slate-950/50 light:bg-slate-100 border border-slate-700/50 light:border-slate-300 rounded-xl text-slate-200 light:text-slate-900 text-xs font-semibold"
                 />
               </div>
 
               <div>
-                <label className="block text-[10px] uppercase font-bold text-slate-400 mb-1.5">
-                  Secure Password *
+                <label className="block text-[10px] font-extrabold uppercase tracking-wider text-slate-400 light:text-slate-600 mb-1">
+                  Password *
                 </label>
                 <input
                   type="password"
@@ -563,32 +513,32 @@ export default function SettingsPage() {
                   value={teacherPassword}
                   onChange={(e) => setTeacherPassword(e.target.value)}
                   placeholder="••••••••"
-                  className="block w-full px-3.5 py-2.5 bg-slate-950/50 border border-slate-700/50 rounded-xl text-slate-200 focus:outline-none focus:ring-1 focus:ring-indigo-500 text-xs"
+                  className="w-full px-3.5 py-2.5 bg-slate-950/50 light:bg-slate-100 border border-slate-700/50 light:border-slate-300 rounded-xl text-slate-200 light:text-slate-900 text-xs font-semibold"
                 />
               </div>
 
               <div>
-                <label className="block text-[10px] uppercase font-bold text-slate-400 mb-1.5">
+                <label className="block text-[10px] font-extrabold uppercase tracking-wider text-slate-400 light:text-slate-600 mb-1">
                   Department
                 </label>
                 <input
                   type="text"
                   value={teacherDept}
                   onChange={(e) => setTeacherDept(e.target.value)}
-                  placeholder="e.g. CSE"
-                  className="block w-full px-3.5 py-2.5 bg-slate-950/50 border border-slate-700/50 rounded-xl text-slate-200 focus:outline-none focus:ring-1 focus:ring-indigo-500 text-xs"
+                  placeholder="CSE"
+                  className="w-full px-3.5 py-2.5 bg-slate-950/50 light:bg-slate-100 border border-slate-700/50 light:border-slate-300 rounded-xl text-slate-200 light:text-slate-900 text-xs font-semibold"
                 />
               </div>
 
               <button
                 type="submit"
                 disabled={teacherSaving}
-                className="w-full flex items-center justify-center gap-2 px-4 py-2.5 bg-indigo-600 hover:bg-indigo-500 disabled:bg-indigo-600/50 text-white font-semibold rounded-xl text-xs transition-colors cursor-pointer"
+                className="btn-gradient w-full py-2.5 font-bold rounded-xl text-xs flex items-center justify-center gap-2 cursor-pointer"
               >
                 {teacherSaving ? (
                   <>
                     <Loader2 className="w-4 h-4 animate-spin" />
-                    <span>Creating account...</span>
+                    <span>Creating...</span>
                   </>
                 ) : (
                   <>
@@ -601,10 +551,10 @@ export default function SettingsPage() {
           </div>
 
           {/* Teacher Accounts List */}
-          <div className="lg:col-span-2 space-y-4">
-            <div className="glass rounded-2xl overflow-hidden border border-slate-800 shadow-xl bg-slate-900/40 backdrop-blur-md">
-              <div className="p-5 border-b border-slate-800">
-                <h4 className="text-sm font-bold text-slate-200 flex items-center gap-2">
+          <div className="lg:col-span-2">
+            <div className="glass-card rounded-3xl overflow-hidden shadow-xl border border-slate-800 light:border-slate-200">
+              <div className="p-5 border-b border-slate-800 light:border-slate-200">
+                <h4 className="text-sm font-bold text-slate-100 light:text-slate-900 flex items-center gap-2">
                   <Users className="w-4 h-4 text-indigo-400" />
                   <span>Existing Teacher Accounts</span>
                 </h4>
@@ -612,29 +562,29 @@ export default function SettingsPage() {
 
               {teachers.length === 0 ? (
                 <div className="p-12 text-center text-slate-500 text-xs">
-                  No teacher accounts created yet. Add one on the left.
+                  No teacher accounts created yet.
                 </div>
               ) : (
                 <div className="overflow-x-auto">
-                  <table className="w-full text-left text-xs text-slate-300">
-                    <thead className="bg-slate-950/80 text-slate-400 font-semibold border-b border-slate-800">
+                  <table className="w-full text-left text-xs border-collapse">
+                    <thead className="bg-slate-950/60 light:bg-slate-100 text-slate-400 light:text-slate-600 font-extrabold uppercase tracking-wider border-b border-slate-800 light:border-slate-200">
                       <tr>
-                        <th className="px-5 py-3.5">Name</th>
-                        <th className="px-5 py-3.5">Email</th>
-                        <th className="px-5 py-3.5">Dept</th>
-                        <th className="px-5 py-3.5 text-right">Action</th>
+                        <th className="px-6 py-3.5">Name</th>
+                        <th className="px-6 py-3.5">Email</th>
+                        <th className="px-6 py-3.5">Dept</th>
+                        <th className="px-6 py-3.5 text-right">Action</th>
                       </tr>
                     </thead>
-                    <tbody className="divide-y divide-slate-800/60">
+                    <tbody className="divide-y divide-slate-850 light:divide-slate-200">
                       {teachers.map((teacher) => (
-                        <tr key={teacher.id} className="hover:bg-slate-800/20 transition-colors">
-                          <td className="px-5 py-4 font-bold text-white">{teacher.name}</td>
-                          <td className="px-5 py-4 text-slate-400">{teacher.email}</td>
-                          <td className="px-5 py-4 font-semibold text-indigo-400">{teacher.department}</td>
-                          <td className="px-5 py-4 text-right">
+                        <tr key={teacher.id} className="hover:bg-slate-800/10 light:hover:bg-slate-50">
+                          <td className="px-6 py-4 font-bold text-slate-100 light:text-slate-900">{teacher.name}</td>
+                          <td className="px-6 py-4 text-slate-400 light:text-slate-600">{teacher.email}</td>
+                          <td className="px-6 py-4 font-mono font-bold text-indigo-400 light:text-indigo-600">{teacher.department}</td>
+                          <td className="px-6 py-4 text-right">
                             <button
                               onClick={() => handleDeleteTeacher(teacher.id)}
-                              className="p-1.5 rounded-lg bg-rose-500/10 text-rose-450 hover:bg-rose-500/20 transition-all border border-rose-500/20 cursor-pointer"
+                              className="p-1.5 rounded-xl text-rose-400 hover:bg-rose-500/10 cursor-pointer"
                               title="Delete Teacher Account"
                             >
                               <Trash2 className="w-4 h-4" />
