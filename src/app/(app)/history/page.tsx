@@ -147,23 +147,31 @@ export default function HistoryPage() {
     setSharingCardKey(cardKey);
 
     try {
-      console.log(`[Share] Attempting to share status card with key: "${cardKey}"`);
-      const cardElement = statusCardRefMap.current[cardKey];
+      console.log(`[Share] Generating Canvas PNG report image for status: "${status}" on date: "${sessionItem.date}"`);
 
-      if (!cardElement) {
-        console.error(`[Share] Status card DOM element with key "${cardKey}" was not found.`);
-        alert(`Unable to locate report card for ${status}. Please try selecting the ${status} tab again.`);
-        return;
-      }
+      const studentDetails = sessionStudentMap[sessionItem.id] || [];
+      const statusFilteredStudents = studentDetails.filter((st) =>
+        matchesTargetStatus(st.status, status)
+      );
 
       const cleanDate = sessionItem.date.replace(/[^a-zA-Z0-9]/g, '_');
       const cleanStatus = status.replace(/[^a-zA-Z0-9]/g, '_');
       const fileName = `Attendance_${cleanDate}_P${sessionItem.period}_${cleanStatus}.png`;
 
-      await shareStatusCardAsImage(cardElement, fileName);
+      await shareStatusCardAsImage({
+        date: sessionItem.date,
+        subject: sessionItem.subject,
+        period: sessionItem.period,
+        status,
+        totalStudentsCount: sessionItem.totalStudents,
+        studentList: statusFilteredStudents,
+        fileName,
+      });
     } catch (err: any) {
       console.error('[Share] Error sharing status card image:', err);
-      alert(`Share error: ${err?.message || 'Failed to capture or share status card'}`);
+      if (err?.name !== 'AbortError') {
+        alert('Sharing is not supported on this browser. The attendance report image has been downloaded instead.');
+      }
     } finally {
       // ALWAYS clear loading state so UI never gets stuck
       setSharingCardKey(null);
