@@ -19,7 +19,9 @@ import {
   Info,
   X,
   UserCheck,
+  Share2,
 } from 'lucide-react';
+import { triggerSessionDateShare } from '@/lib/nativeShare';
 
 interface AttendanceSession {
   id: string;
@@ -57,6 +59,20 @@ export default function HistoryPage() {
   const [loadingDetails, setLoadingDetails] = useState(false);
   const [modalSearchQuery, setModalSearchQuery] = useState('');
   const [modalStatusFilter, setModalStatusFilter] = useState<string>('ALL');
+  const [isSharing, setIsSharing] = useState(false);
+
+  const handleShareSelectedSession = async () => {
+    if (!selectedSession) return;
+    setIsSharing(true);
+    try {
+      await triggerSessionDateShare({
+        session: selectedSession,
+        studentDetails,
+      });
+    } finally {
+      setIsSharing(false);
+    }
+  };
 
   // Load all sessions directly from Neon PostgreSQL
   const loadSessionsData = async () => {
@@ -321,12 +337,23 @@ export default function HistoryPage() {
                   {selectedSession.subject} &bull; Period {selectedSession.period} &bull; Saved at {selectedSession.savedAt}
                 </p>
               </div>
-              <button
-                onClick={() => setSelectedSession(null)}
-                className="p-1 text-slate-400 hover:text-white rounded-lg hover:bg-slate-800 transition-colors cursor-pointer"
-              >
-                <X className="w-5 h-5" />
-              </button>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={handleShareSelectedSession}
+                  disabled={isSharing || loadingDetails}
+                  className="flex items-center gap-2 px-3.5 py-1.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white font-bold text-xs shadow-lg shadow-indigo-600/20 transition-all cursor-pointer"
+                  title="Share Attendance Report for this date"
+                >
+                  <Share2 className="w-4 h-4" />
+                  <span>{isSharing ? 'Preparing...' : 'Share Date Report'}</span>
+                </button>
+                <button
+                  onClick={() => setSelectedSession(null)}
+                  className="p-1.5 text-slate-400 hover:text-white rounded-lg hover:bg-slate-800 transition-colors cursor-pointer"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
             </div>
 
             {/* Read-Only Guidance Note in Modal */}

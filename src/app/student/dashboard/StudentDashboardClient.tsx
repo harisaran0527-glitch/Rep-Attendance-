@@ -287,15 +287,6 @@ export default function StudentDashboardClient({
 
           <div className="flex items-center gap-3">
             <button
-              onClick={handleShare}
-              disabled={isSharing}
-              className="flex items-center gap-2 px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white font-bold text-xs shadow-lg shadow-indigo-600/20 transition-all cursor-pointer"
-              title="Share Attendance History"
-            >
-              <Share2 className="w-4 h-4" />
-              <span>{isSharing ? 'Preparing...' : 'Share'}</span>
-            </button>
-            <button
               onClick={handleLogout}
               disabled={isPending}
               className="flex items-center gap-2 px-3.5 py-2 rounded-xl bg-slate-800/60 hover:bg-slate-800 text-slate-300 hover:text-white border border-slate-700/50 text-xs font-semibold transition-all cursor-pointer"
@@ -469,16 +460,6 @@ export default function StudentDashboardClient({
               Attendance Logs ({history.length})
             </button>
           </div>
-
-          <button
-            onClick={handleShare}
-            disabled={isSharing}
-            className="flex items-center gap-2 px-3.5 py-1.5 rounded-xl bg-indigo-600/20 hover:bg-indigo-600/30 text-indigo-300 border border-indigo-500/30 text-xs font-bold transition-all cursor-pointer mb-2 disabled:opacity-50"
-            title="Share Attendance Report"
-          >
-            <Share2 className="w-3.5 h-3.5" />
-            <span>{isSharing ? 'Sharing...' : 'Share'}</span>
-          </button>
         </div>
 
         {/* Tab 1: Subject Wise Performance */}
