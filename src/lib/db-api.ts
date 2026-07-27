@@ -1,10 +1,13 @@
 import { prisma } from './db';
 
-// Helper to normalize date to local midnight (00:00:00.000)
+// Helper to normalize date to UTC midnight (00:00:00.000Z) consistently across server & client
 export function normalizeDate(dateInput: Date | string | number): Date {
+  if (typeof dateInput === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(dateInput.trim())) {
+    const [y, m, d] = dateInput.trim().split('-').map(Number);
+    return new Date(Date.UTC(y, m - 1, d, 0, 0, 0, 0));
+  }
   const d = new Date(dateInput);
-  d.setHours(0, 0, 0, 0);
-  return d;
+  return new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate(), 0, 0, 0, 0));
 }
 
 // Fixed baseline start date for attendance calculation (13/07/2026)
@@ -31,6 +34,26 @@ export const ATTENDANCE_STATUSES = [
 ] as const;
 
 export type AttendanceStatus = typeof ATTENDANCE_STATUSES[number];
+
+// Helper to normalize any stored or input status variant into a canonical AttendanceStatus string
+export function normalizeStatus(rawStatus: string): 'Present' | 'Absent' | 'OD' | 'Medical Leave' | 'Long Absent' | 'Unmarked' {
+  if (!rawStatus) return 'Unmarked';
+  const s = rawStatus.trim().toLowerCase().replace(/_/g, ' ');
+
+  if (s === 'present' || s === 'p') return 'Present';
+  if (s === 'absent' || s === 'a') return 'Absent';
+  if (s === 'od' || s === 'on duty' || s === 'on duty (od)' || s === 'onduty') return 'OD';
+  if (s === 'ml' || s === 'medical leave' || s === 'medical leave (ml)' || s === 'medical_leave' || s === 'medicalleave') return 'Medical Leave';
+  if (s === 'la' || s === 'long absent' || s === 'long_absent' || s === 'longabsent') return 'Long Absent';
+
+  if (s.includes('present')) return 'Present';
+  if (s.includes('absent') && !s.includes('long')) return 'Absent';
+  if (s.includes('duty') || s.includes('od')) return 'OD';
+  if (s.includes('medical') || s.includes('ml')) return 'Medical Leave';
+  if (s.includes('long')) return 'Long Absent';
+
+  return 'Unmarked';
+}
 
 // ==========================================
 // SMTP SETTINGS & EMAIL LOGS API

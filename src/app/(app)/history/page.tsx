@@ -25,6 +25,7 @@ import {
   AlertCircle,
 } from 'lucide-react';
 import { shareStatusCardAsImage } from '@/lib/nativeShare';
+import { normalizeStatus } from '@/lib/db-api';
 
 interface AttendanceSession {
   id: string;
@@ -172,12 +173,9 @@ export default function HistoryPage() {
   // Helper function to check if student record matches target status
   const matchesTargetStatus = (studentStatus: string, targetStatus: string) => {
     if (targetStatus === 'ALL') return true;
-    if (targetStatus === 'Present') return studentStatus === 'Present';
-    if (targetStatus === 'Absent') return studentStatus === 'Absent';
-    if (targetStatus === 'OD' || targetStatus === 'On Duty (OD)') return studentStatus === 'On Duty (OD)' || studentStatus === 'OD';
-    if (targetStatus === 'ML' || targetStatus === 'Medical Leave (ML)') return studentStatus === 'Medical Leave (ML)' || studentStatus === 'Medical Leave';
-    if (targetStatus === 'LA' || targetStatus === 'Long Absent') return studentStatus === 'Long Absent';
-    return studentStatus === targetStatus;
+    const normStudent = normalizeStatus(studentStatus);
+    const normTarget = normalizeStatus(targetStatus);
+    return normStudent === normTarget;
   };
 
   // Filter session list by query/date
@@ -191,7 +189,8 @@ export default function HistoryPage() {
   });
 
   const getStatusBadge = (status: string) => {
-    switch (status) {
+    const norm = normalizeStatus(status);
+    switch (norm) {
       case 'Present':
         return (
           <span className="px-2.5 py-1 rounded-full text-xs font-bold bg-emerald-500/15 text-emerald-400 border border-emerald-500/30">
@@ -204,22 +203,19 @@ export default function HistoryPage() {
             Absent
           </span>
         );
-      case 'On Duty (OD)':
       case 'OD':
         return (
           <span className="px-2.5 py-1 rounded-full text-xs font-bold bg-blue-500/15 text-blue-400 border border-blue-500/30">
             On Duty (OD)
           </span>
         );
-      case 'Medical Leave (ML)':
-      case 'ML':
+      case 'Medical Leave':
         return (
           <span className="px-2.5 py-1 rounded-full text-xs font-bold bg-purple-500/15 text-purple-400 border border-purple-500/30">
             Medical Leave
           </span>
         );
       case 'Long Absent':
-      case 'LA':
         return (
           <span className="px-2.5 py-1 rounded-full text-xs font-bold bg-zinc-500/15 text-zinc-400 border border-zinc-500/30">
             Long Absent
@@ -228,7 +224,7 @@ export default function HistoryPage() {
       default:
         return (
           <span className="px-2.5 py-1 rounded-full text-xs font-bold bg-slate-800 text-slate-400">
-            {status}
+            {status || 'Unmarked'}
           </span>
         );
     }
@@ -324,21 +320,38 @@ export default function HistoryPage() {
 
             // Get total count for active status
             const getStatusCount = (status: string) => {
-              switch (status) {
+              const norm = normalizeStatus(status);
+              switch (norm) {
                 case 'Present': return session.present;
                 case 'Absent': return session.absent;
-                case 'OD':
-                case 'On Duty (OD)': return session.od;
-                case 'ML':
-                case 'Medical Leave (ML)': return session.ml;
-                case 'LA':
+                case 'OD': return session.od;
+                case 'Medical Leave': return session.ml;
                 case 'Long Absent': return session.la;
-                case 'ALL': return session.totalStudents;
-                default: return 0;
+                default:
+                  if (status === 'ALL') return session.totalStudents;
+                  return 0;
               }
             };
 
             const activeStatusCount = getStatusCount(activeStatus);
+
+            if (isExpanded && studentDetails.length > 0) {
+              const rawCounts = studentDetails.reduce((acc: Record<string, number>, s) => {
+                const norm = normalizeStatus(s.status);
+                acc[norm] = (acc[norm] || 0) + 1;
+                return acc;
+              }, {});
+
+              console.log(`[History Debug] Selected Session Object:`, {
+                id: session.id,
+                date: session.date,
+                present: session.present,
+                absent: session.absent,
+                totalStudents: session.totalStudents,
+              });
+              console.log(`[History Debug] Session "${session.date}" Raw DB Statuses:`, rawCounts);
+              console.log(`[History Debug] Session "${session.date}" Active Tab: "${activeStatus}" -> Filtered Student Count: ${statusFilteredStudents.length}`);
+            }
 
             return (
               <div
@@ -518,9 +531,13 @@ export default function HistoryPage() {
                         {/* SHARE BUTTON AT TOP-RIGHT OF THIS SPECIFIC STATUS DETAIL CARD */}
                         <button
                           onClick={() => handleShareStatusCard(session, activeStatus)}
-                          disabled={isSharing || isLoadingDetails}
-                          className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white font-bold text-xs shadow-lg shadow-emerald-600/30 transition-all cursor-pointer hover:scale-105 active:scale-95 shrink-0"
-                          title={`Share ${activeStatus} status card image`}
+                          disabled={isSharing || isLoadingDetails || statusFilteredStudents.length === 0}
+                          className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 disabled:cursor-not-allowed text-white font-bold text-xs shadow-lg shadow-emerald-600/30 transition-all cursor-pointer hover:scale-105 active:scale-95 shrink-0"
+                          title={
+                            statusFilteredStudents.length === 0
+                              ? 'No students to share for this status'
+                              : `Share ${activeStatus} status card image`
+                          }
                         >
                           {isSharing ? (
                             <Loader2 className="w-4 h-4 animate-spin" />
@@ -538,8 +555,8 @@ export default function HistoryPage() {
                             <Loader2 className="w-8 h-8 text-indigo-500 animate-spin" />
                           </div>
                         ) : statusFilteredStudents.length === 0 ? (
-                          <div className="py-12 text-center text-slate-500 text-xs font-semibold">
-                            No students marked as <strong className="text-indigo-400">{activeStatus}</strong> for this session.
+                          <div className="py-12 text-center text-slate-400 light:text-slate-500 text-xs font-semibold">
+                            No students found for this status.
                           </div>
                         ) : (
                           <table className="w-full text-left border-collapse text-xs">

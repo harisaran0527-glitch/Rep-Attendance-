@@ -40,7 +40,8 @@ import {
   addTeacher,
   getAllTeachers,
   deleteTeacher,
-  findTeacherByEmail
+  findTeacherByEmail,
+  normalizeStatus
 } from '@/lib/db-api';
 import { sendLowAttendanceEmail } from '@/lib/email';
 
@@ -603,24 +604,33 @@ export async function getAllAttendanceSessionsAction() {
     const sessions = await Promise.all(
       distinctDates.map(async (item) => {
         const dateStr = item.date.toISOString().split('T')[0];
-        const dateNorm = normalizeDate(item.date);
+        const targetDate = normalizeDate(dateStr);
+
+        const startOfDay = new Date(Date.UTC(targetDate.getUTCFullYear(), targetDate.getUTCMonth(), targetDate.getUTCDate(), 0, 0, 0, 0));
+        const endOfDay = new Date(Date.UTC(targetDate.getUTCFullYear(), targetDate.getUTCMonth(), targetDate.getUTCDate(), 23, 59, 59, 999));
 
         const records = await prisma.attendance.findMany({
-          where: { date: dateNorm },
+          where: {
+            date: {
+              gte: startOfDay,
+              lte: endOfDay,
+            },
+          },
           select: { status: true },
         });
 
         const counts = {
           Present: 0,
           Absent: 0,
-          'On Duty (OD)': 0,
-          'Medical Leave (ML)': 0,
+          OD: 0,
+          'Medical Leave': 0,
           'Long Absent': 0,
         };
 
         records.forEach((r) => {
-          if (r.status in counts) {
-            counts[r.status as keyof typeof counts]++;
+          const norm = normalizeStatus(r.status);
+          if (norm in counts) {
+            counts[norm as keyof typeof counts]++;
           }
         });
 
@@ -632,8 +642,8 @@ export async function getAllAttendanceSessionsAction() {
           totalStudents,
           present: counts['Present'],
           absent: counts['Absent'],
-          od: counts['On Duty (OD)'],
-          ml: counts['Medical Leave (ML)'],
+          od: counts['OD'],
+          ml: counts['Medical Leave'],
           la: counts['Long Absent'],
           savedAt: item.updatedAt ? new Date(item.updatedAt).toLocaleString() : dateStr,
           savedBy: 'Class Representative Admin',
@@ -654,7 +664,11 @@ export async function getSessionStudentDetailsAction(dateString: string) {
   }
 
   try {
-    const targetDate = normalizeDate(new Date(dateString));
+    const targetDate = normalizeDate(dateString);
+    const startOfDay = new Date(Date.UTC(targetDate.getUTCFullYear(), targetDate.getUTCMonth(), targetDate.getUTCDate(), 0, 0, 0, 0));
+    const endOfDay = new Date(Date.UTC(targetDate.getUTCFullYear(), targetDate.getUTCMonth(), targetDate.getUTCDate(), 23, 59, 59, 999));
+
+    console.log(`[getSessionStudentDetailsAction] Querying dateString: "${dateString}" (Range: ${startOfDay.toISOString()} to ${endOfDay.toISOString()})`);
     
     const allStudents = await prisma.student.findMany({
       select: {
@@ -666,12 +680,19 @@ export async function getSessionStudentDetailsAction(dateString: string) {
     });
 
     const attRecords = await prisma.attendance.findMany({
-      where: { date: targetDate },
+      where: {
+        date: {
+          gte: startOfDay,
+          lte: endOfDay,
+        },
+      },
       select: {
         studentId: true,
         status: true,
       },
     });
+
+    console.log(`[getSessionStudentDetailsAction] Found ${attRecords.length} attendance records for date "${dateString}".`);
 
     const statusMap: Record<number, string> = {};
     attRecords.forEach((a) => {
