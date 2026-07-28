@@ -147,7 +147,7 @@ export async function deleteAllEmailLogs() {
   return prisma.emailLog.deleteMany({});
 }
 
-export async function getValidWorkingDates(startDateStr: string, endDateStr?: string): Promise<Date[]> {
+export async function getValidWorkingDates(startDateStr: string, endDateStr?: string, preFetchedStudentCount?: number): Promise<Date[]> {
   const start = normalizeDate(startDateStr);
   const now = normalizeDate(new Date());
   const requestedEnd = endDateStr ? normalizeDate(endDateStr) : now;
@@ -157,7 +157,7 @@ export async function getValidWorkingDates(startDateStr: string, endDateStr?: st
     return [];
   }
 
-  const totalStudents = await prisma.student.count();
+  const totalStudents = preFetchedStudentCount !== undefined ? preFetchedStudentCount : await prisma.student.count();
   const threshold = totalStudents > 0 ? totalStudents : 1; // 100% of active students must be marked for a valid working day
 
   const dateCounts = await prisma.attendance.groupBy({
@@ -232,6 +232,68 @@ export async function calculateOverallAttendance(studentId: number, targetDateIn
     daysAbsent,
     totalDays: validDates.length,
     openingDate: openingDateStr,
+  };
+}
+
+export async function calculateAllStudentsAttendanceStats(targetDateInput?: Date | string, studentIds?: number[]) {
+  const settings = await getSmtpSettings();
+  const openingDateStr = settings.collegeOpeningDate || '2026-07-13';
+
+  const now = normalizeDate(new Date());
+  const requestedTarget = targetDateInput ? normalizeDate(targetDateInput) : now;
+  const targetDate = requestedTarget.getTime() > now.getTime() ? now : requestedTarget;
+
+  const validDates = await getValidWorkingDates(openingDateStr, targetDate.toISOString().split('T')[0]);
+  const totalWorkingDays = validDates.length;
+
+  const whereClause: any = {
+    date: {
+      in: validDates,
+    },
+  };
+
+  if (studentIds && studentIds.length > 0) {
+    whereClause.studentId = { in: studentIds };
+  }
+
+  const allAttendances = await prisma.attendance.findMany({
+    where: whereClause,
+    select: {
+      studentId: true,
+      status: true,
+    },
+  });
+
+  const attendedStatuses = ['Present', 'On Duty (OD)'];
+  const presentCountMap: Record<number, number> = {};
+
+  allAttendances.forEach((att) => {
+    if (attendedStatuses.includes(att.status)) {
+      presentCountMap[att.studentId] = (presentCountMap[att.studentId] || 0) + 1;
+    }
+  });
+
+  return {
+    settings,
+    totalWorkingDays,
+    validDates,
+    getStudentStats: (studentId: number) => {
+      const attended = presentCountMap[studentId] || 0;
+      const percentage = totalWorkingDays > 0
+        ? Math.round((attended / totalWorkingDays) * 10000) / 100
+        : 100.0;
+      const absent = Math.max(0, totalWorkingDays - attended);
+
+      return {
+        percentage,
+        attended,
+        total: totalWorkingDays,
+        absent,
+        daysPresent: attended,
+        daysAbsent: absent,
+        totalDays: totalWorkingDays,
+      };
+    },
   };
 }
 

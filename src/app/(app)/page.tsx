@@ -79,13 +79,14 @@ export default function DashboardPage() {
   const fetchStats = async () => {
     setLoading(true);
     try {
-      const data = await getDashboardStatsAction(date);
+      const [data, dailyData, recent] = await Promise.all([
+        getDashboardStatsAction(date),
+        getDailyAttendanceSummaryAction(date),
+        getRecentActivityAction(),
+      ]);
+
       setStats(data);
-
-      const dailyData = await getDailyAttendanceSummaryAction(date);
       setDailySummary(dailyData);
-
-      const recent = await getRecentActivityAction();
       setActivities(recent);
     } catch (error) {
       console.error('Error fetching dashboard stats:', error);

@@ -20,10 +20,12 @@ export default async function StudentDashboardPage() {
   }
 
   try {
-    const profileStatsRes = await getStudentProfileStatsAction();
-    const history = await getStudentHistoryAction();
-    const subjectStats = await getStudentSubjectStatsAction();
-    const monthlyStats = await getStudentMonthlyStatsAction();
+    const [profileStatsRes, history, subjectStats, monthlyStats] = await Promise.all([
+      getStudentProfileStatsAction(),
+      getStudentHistoryAction(),
+      getStudentSubjectStatsAction(),
+      getStudentMonthlyStatsAction(),
+    ]);
 
     return (
       <StudentDashboardClient

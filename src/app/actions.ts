@@ -33,6 +33,7 @@ import {
   deleteEmailLog,
   deleteAllEmailLogs,
   calculateOverallAttendance,
+  calculateAllStudentsAttendanceStats,
   getWorkingDaysCount,
   getValidWorkingDates,
   ATTENDANCE_START_DATE,
@@ -58,21 +59,21 @@ export async function getAllStudentsWithStats() {
     throw new Error('Unauthorized');
   }
 
-  // 1. Fetch ALL 58 active students unconditionally
-  const students = await dbGetAllStudents();
-
   try {
-    // 2. Fetch baseline opening date from settings
-    const settings = await getSmtpSettings();
+    // 1. Fetch active students and settings in parallel
+    const [students, settings] = await Promise.all([
+      dbGetAllStudents(),
+      getSmtpSettings(),
+    ]);
+
     const openingDateStr = settings.collegeOpeningDate || '2026-07-13';
     const now = normalizeDate(new Date());
 
-    // 3. Get valid working dates (only complete weekday-only sessions)
-    const validDates = await getValidWorkingDates(openingDateStr, now.toISOString().split('T')[0]);
-    const validDateTimes = new Set(validDates.map((d) => d.getTime()));
+    // 2. Get valid working dates (passing pre-fetched student count to avoid extra count query)
+    const validDates = await getValidWorkingDates(openingDateStr, now.toISOString().split('T')[0], students.length);
     const totalWorkingDays = validDates.length;
 
-    // 4. Bulk fetch attendance records on valid working dates
+    // 3. Bulk fetch attendance records on valid working dates
     const allAttendances = await prisma.attendance.findMany({
       where: {
         date: {
@@ -95,7 +96,7 @@ export async function getAllStudentsWithStats() {
       }
     });
 
-    // Map all 58 students (including students with 0 attendance records)
+    // Map all students
     const results = students.map((student) => {
       const attended = presentCountMap[student.id] || 0;
       const percentage = totalWorkingDays > 0 
@@ -112,15 +113,10 @@ export async function getAllStudentsWithStats() {
       };
     });
 
-    const sample = results.find(s => s.studentName === 'RANJITH V') || results[0];
-    if (sample) {
-      console.log(`[SERVER DEBUG] Student Name: "${sample.studentName}" | Present Days: ${sample.attended} | Total Distinct Marked Dates: ${sample.totalClasses} | Final Calculated Percentage: ${sample.percentage}% | Value Sent to UI: ${sample.percentage}%`);
-    }
-
     return results;
   } catch (error) {
     console.error('Error calculating bulk stats, falling back to base student list:', error);
-    // Fallback: Return all 58 students so student list NEVER breaks
+    const students = await dbGetAllStudents();
     return students.map((student) => ({
       ...student,
       percentage: 100.0,
@@ -404,7 +400,7 @@ export async function saveBulkAttendanceAction(
   }
 
   try {
-    const targetDateNorm = normalizeDate(new Date(dateString));
+    const targetDateNorm = normalizeDate(dateString);
 
     // Fast 2-query atomic transaction (deleteMany + createMany)
     await prisma.$transaction([
@@ -430,7 +426,9 @@ export async function saveBulkAttendanceAction(
     revalidatePath('/history');
     revalidatePath('/dashboard');
     revalidatePath('/student/dashboard');
-    return { success: true };
+
+    const updatedStudents = await getAllStudentsWithStats();
+    return { success: true, updatedStudents };
   } catch (error) {
     console.error('Bulk attendance save error:', error);
     return { success: false, error: 'Failed to save attendance.' };
@@ -442,18 +440,17 @@ async function processWarningEmailsBackground(
   records: { studentId: number; status: AttendanceStatus }[]
 ) {
   try {
-    const settings = await getSmtpSettings();
-    const openingDateStr = settings.collegeOpeningDate || '2026-07-13';
-    const totalWorkingDays = await getWorkingDaysCount(openingDateStr, dateString);
+    const affectedStudentIds = Array.from(new Set(records.map((r) => r.studentId)));
+    const batchData = await calculateAllStudentsAttendanceStats(dateString, affectedStudentIds);
+    const { settings, totalWorkingDays, getStudentStats } = batchData;
 
     if (totalWorkingDays < 1) return;
 
-    const affectedStudentIds = Array.from(new Set(records.map((r) => r.studentId)));
-    const markedDateNorm = normalizeDate(new Date(dateString));
+    const markedDateNorm = normalizeDate(dateString);
 
     for (const studentId of affectedStudentIds) {
       try {
-        const { percentage, attended, total } = await calculateOverallAttendance(studentId, dateString);
+        const { percentage, attended, total } = getStudentStats(studentId);
         if (percentage < settings.lowThreshold) {
           const warnedForDate = await prisma.emailLog.findFirst({
             where: {
@@ -585,71 +582,58 @@ export async function getAllAttendanceSessionsAction() {
     const openingDateStr = settings.collegeOpeningDate || '2026-07-13';
     const openingDate = normalizeDate(openingDateStr);
 
-    const distinctDates = await prisma.attendance.findMany({
-      where: {
-        date: {
-          gte: openingDate,
+    const [totalStudents, groupCounts] = await Promise.all([
+      prisma.student.count(),
+      prisma.attendance.groupBy({
+        by: ['date', 'status'],
+        where: {
+          date: {
+            gte: openingDate,
+          },
         },
-      },
-      select: {
-        date: true,
-        updatedAt: true,
-      },
-      distinct: ['date'],
-      orderBy: { date: 'desc' },
+        _count: {
+          id: true,
+        },
+        orderBy: {
+          date: 'desc',
+        },
+      }),
+    ]);
+
+    const sessionsMap: Record<string, {
+      dateStr: string;
+      counts: { Present: number; Absent: number; OD: number; 'Medical Leave': number; 'Long Absent': number };
+    }> = {};
+
+    groupCounts.forEach((item) => {
+      const dateStr = item.date.toISOString().split('T')[0];
+      if (!sessionsMap[dateStr]) {
+        sessionsMap[dateStr] = {
+          dateStr,
+          counts: { Present: 0, Absent: 0, OD: 0, 'Medical Leave': 0, 'Long Absent': 0 },
+        };
+      }
+      const norm = normalizeStatus(item.status);
+      type CountKeys = 'Present' | 'Absent' | 'OD' | 'Medical Leave' | 'Long Absent';
+      if (norm in sessionsMap[dateStr].counts) {
+        sessionsMap[dateStr].counts[norm as CountKeys] += item._count.id;
+      }
     });
 
-    const totalStudents = await prisma.student.count();
-
-    const sessions = await Promise.all(
-      distinctDates.map(async (item) => {
-        const dateStr = item.date.toISOString().split('T')[0];
-        const targetDate = normalizeDate(dateStr);
-
-        const startOfDay = new Date(Date.UTC(targetDate.getUTCFullYear(), targetDate.getUTCMonth(), targetDate.getUTCDate(), 0, 0, 0, 0));
-        const endOfDay = new Date(Date.UTC(targetDate.getUTCFullYear(), targetDate.getUTCMonth(), targetDate.getUTCDate(), 23, 59, 59, 999));
-
-        const records = await prisma.attendance.findMany({
-          where: {
-            date: {
-              gte: startOfDay,
-              lte: endOfDay,
-            },
-          },
-          select: { status: true },
-        });
-
-        const counts = {
-          Present: 0,
-          Absent: 0,
-          OD: 0,
-          'Medical Leave': 0,
-          'Long Absent': 0,
-        };
-
-        records.forEach((r) => {
-          const norm = normalizeStatus(r.status);
-          if (norm in counts) {
-            counts[norm as keyof typeof counts]++;
-          }
-        });
-
-        return {
-          id: dateStr,
-          date: dateStr,
-          subject: 'General Daily Attendance',
-          period: 1,
-          totalStudents,
-          present: counts['Present'],
-          absent: counts['Absent'],
-          od: counts['OD'],
-          ml: counts['Medical Leave'],
-          la: counts['Long Absent'],
-          savedAt: item.updatedAt ? new Date(item.updatedAt).toLocaleString() : dateStr,
-          savedBy: 'Class Representative Admin',
-        };
-      })
-    );
+    const sessions = Object.values(sessionsMap).map((item) => ({
+      id: item.dateStr,
+      date: item.dateStr,
+      subject: 'General Daily Attendance',
+      period: 1,
+      totalStudents,
+      present: item.counts['Present'],
+      absent: item.counts['Absent'],
+      od: item.counts['OD'],
+      ml: item.counts['Medical Leave'],
+      la: item.counts['Long Absent'],
+      savedAt: item.dateStr,
+      savedBy: 'Class Representative Admin',
+    }));
 
     return { success: true, data: sessions };
   } catch (error) {

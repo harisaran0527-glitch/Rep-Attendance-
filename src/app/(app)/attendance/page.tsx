@@ -77,10 +77,13 @@ export default function AttendancePage() {
     setSuccessMsg(null);
     setErrorMsg(null);
     try {
-      const studentsData = await getAllStudentsWithStats();
+      const [studentsData, attResult] = await Promise.all([
+        getAllStudentsWithStats(),
+        getAttendanceForDateAction(date),
+      ]);
+
       setStudents(studentsData);
 
-      const attResult = await getAttendanceForDateAction(date);
       if (attResult.success && attResult.data && Object.keys(attResult.data).length > 0) {
         setIsExisting(true);
         const newMap: AttendanceMap = {};
@@ -220,10 +223,14 @@ export default function AttendancePage() {
         setSuccessMsg(msg);
         setIsExisting(true);
         setSavedRecordCount(students.length);
-        const updatedStudents = await getAllStudentsWithStats();
-        setStudents(updatedStudents);
+        if (result.updatedStudents) {
+          setStudents(result.updatedStudents);
+        } else {
+          const updatedStudents = await getAllStudentsWithStats();
+          setStudents(updatedStudents);
+        }
       } else {
-        setErrorMsg('Failed to save attendance. Please try again.');
+        setErrorMsg(result.error || 'Failed to save attendance. Please try again.');
       }
     } catch (err) {
       setErrorMsg('An error occurred while saving attendance.');
