@@ -367,15 +367,22 @@ export async function sendTestEmailAction(testEmail: string) {
   }
   try {
     const settings = await getSmtpSettings();
-    const result = await sendLowAttendanceEmail(
-      'Test Student',
-      testEmail,
-      72.5,
-      settings.lowThreshold,
-      settings,
-      70,
-      100
-    );
+    const result = await sendLowAttendanceEmail({
+      studentName: 'Test Student',
+      studentEmail: testEmail,
+      registerNumber: 'TEST101',
+      department: 'CSE',
+      year: 'II',
+      section: 'A',
+      percentage: 72.5,
+      threshold: settings.lowThreshold,
+      totalWorkingSessions: 100,
+      presentCount: 72,
+      absentCount: 28,
+      month: '2026-07',
+      warningDate: '2026-07-28',
+      smtpSettings: settings,
+    });
     return result;
   } catch (err: any) {
     return { success: false, status: 'Simulated', error: err.message };
@@ -435,79 +442,7 @@ export async function saveBulkAttendanceAction(
   }
 }
 
-async function processWarningEmailsBackground(
-  dateString: string,
-  records: { studentId: number; status: AttendanceStatus }[]
-) {
-  try {
-    const affectedStudentIds = Array.from(new Set(records.map((r) => r.studentId)));
-    const batchData = await calculateAllStudentsAttendanceStats(dateString, affectedStudentIds);
-    const { settings, totalWorkingDays, getStudentStats } = batchData;
 
-    if (totalWorkingDays < 1) return;
-
-    const markedDateNorm = normalizeDate(dateString);
-
-    for (const studentId of affectedStudentIds) {
-      try {
-        const { percentage, attended, total } = getStudentStats(studentId);
-        if (percentage < settings.lowThreshold) {
-          const warnedForDate = await prisma.emailLog.findFirst({
-            where: {
-              studentId,
-              sentAt: { gte: markedDateNorm },
-            },
-          });
-
-          if (!warnedForDate) {
-            const student = await prisma.student.findUnique({
-              where: { id: studentId },
-            });
-
-            if (student && student.email) {
-              const emailResult = await sendLowAttendanceEmail(
-                student.studentName,
-                student.email,
-                percentage,
-                settings.lowThreshold,
-                settings,
-                attended,
-                total,
-                student.registerNumber
-              );
-
-              const subjectText = `Attendance Warning – Below 75%`;
-              const bodyText = `Dear ${student.studentName},
-
-Your current attendance percentage is ${percentage}%, which is below the required 75%.
-
-Please improve your attendance and contact your class representative if you need clarification.
-
-Student Register Number: ${student.registerNumber}
-Current Attendance: ${percentage}%
-
-Regards,
-Class Representative`;
-
-              await logSentEmail({
-                studentId,
-                email: student.email,
-                percentage,
-                subject: subjectText,
-                body: bodyText,
-                status: emailResult.status === 'Sent' ? 'Sent' : emailResult.status === 'Simulated' ? 'Simulated' : 'Failed',
-              });
-            }
-          }
-        }
-      } catch (emailErr) {
-        console.error(`Background warning email error for student ${studentId}:`, emailErr);
-      }
-    }
-  } catch (err) {
-    console.error('Error in processWarningEmailsBackground:', err);
-  }
-}
 
 export async function clearSavedAttendanceAction(dateString: string) {
   if (!(await isStaffAuthenticated())) {

@@ -1,4 +1,5 @@
 import { cookies } from 'next/headers';
+import { cache } from 'react';
 
 export async function setAdminSession(email: string) {
   const cookieStore = await cookies();
@@ -16,15 +17,15 @@ export async function clearAdminSession() {
   cookieStore.delete('admin_session');
 }
 
-export async function getAdminSession() {
+export const getAdminSession = cache(async () => {
   const cookieStore = await cookies();
   return cookieStore.get('admin_session')?.value || null;
-}
+});
 
-export async function isAdminAuthenticated() {
+export const isAdminAuthenticated = cache(async () => {
   const session = await getAdminSession();
   return session === 'classrep@gmail.com';
-}
+});
 
 export async function setStudentSession(email: string, studentId: number) {
   const cookieStore = await cookies();
@@ -42,7 +43,7 @@ export async function clearStudentSession() {
   cookieStore.delete('student_session');
 }
 
-export async function getStudentSession() {
+export const getStudentSession = cache(async () => {
   const cookieStore = await cookies();
   const val = cookieStore.get('student_session')?.value;
   if (!val) return null;
@@ -51,12 +52,12 @@ export async function getStudentSession() {
   } catch {
     return null;
   }
-}
+});
 
-export async function isStudentAuthenticated() {
+export const isStudentAuthenticated = cache(async () => {
   const session = await getStudentSession();
   return session !== null;
-}
+});
 
 export async function setTeacherSession(email: string, teacherId: number) {
   const cookieStore = await cookies();
@@ -74,7 +75,7 @@ export async function clearTeacherSession() {
   cookieStore.delete('teacher_session');
 }
 
-export async function getTeacherSession() {
+export const getTeacherSession = cache(async () => {
   const cookieStore = await cookies();
   const val = cookieStore.get('teacher_session')?.value;
   if (!val) return null;
@@ -83,16 +84,16 @@ export async function getTeacherSession() {
   } catch {
     return null;
   }
-}
+});
 
-export async function isTeacherAuthenticated() {
+export const isTeacherAuthenticated = cache(async () => {
   const session = await getTeacherSession();
   return session !== null;
-}
+});
 
-export async function isStaffAuthenticated() {
+export const isStaffAuthenticated = cache(async () => {
   const isAdmin = await isAdminAuthenticated();
   if (isAdmin) return true;
   const isTeacher = await isTeacherAuthenticated();
   return isTeacher;
-}
+});

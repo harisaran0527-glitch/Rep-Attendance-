@@ -24,7 +24,6 @@ export interface MonthlyWarningJobSummary {
  * Returns current date/time components in Asia/Kolkata (IST, UTC+5:30) timezone.
  */
 export function getKolkataDateInfo(dateInput: Date = new Date()) {
-  // Format to IST string: YYYY-MM-DD HH:mm:ss
   const formatter = new Intl.DateTimeFormat('en-CA', {
     timeZone: 'Asia/Kolkata',
     year: 'numeric',
@@ -56,7 +55,7 @@ export function getKolkataDateInfo(dateInput: Date = new Date()) {
 
 /**
  * Monthly Attendance Warning Email Job
- * Runs on the 27th of every month in Asia/Kolkata timezone.
+ * Automatically runs on the 27th of every month in Asia/Kolkata timezone.
  */
 export async function runMonthlyWarningEmailJob(
   options: MonthlyWarningJobOptions = {}
@@ -100,13 +99,16 @@ export async function runMonthlyWarningEmailJob(
     };
   }
 
-  // Fetch all active students with strict column selection (no passwords fetched)
+  // Fetch all active students with strict column selection (excluding password)
   const students = await prisma.student.findMany({
     select: {
       id: true,
       studentName: true,
       registerNumber: true,
       email: true,
+      department: true,
+      year: true,
+      section: true,
     },
     orderBy: { registerNumber: 'asc' },
   });
@@ -131,7 +133,7 @@ export async function runMonthlyWarningEmailJob(
   const batchStats = await calculateAllStudentsAttendanceStats(targetDateStr);
   const threshold = settings.lowThreshold; // Default 75.0%
 
-  // Find students whose overall attendance is strictly below 75% (< threshold)
+  // Find students whose overall attendance is strictly below 75% (< 75.0%)
   const eligibleStudents = students.filter((student) => {
     const stats = batchStats.getStudentStats(student.id);
     return stats.percentage < threshold; // Strictly below 75%
@@ -139,7 +141,7 @@ export async function runMonthlyWarningEmailJob(
 
   const skippedCount = totalChecked - eligibleStudents.length;
 
-  // Check which students already received warning email for this warningMonth
+  // Check database for existing EmailLog records for this warningMonth
   const existingLogs = await prisma.emailLog.findMany({
     where: {
       warningMonth,
@@ -176,33 +178,49 @@ export async function runMonthlyWarningEmailJob(
   for (const student of studentsToWarn) {
     const stats = batchStats.getStudentStats(student.id);
     try {
-      const emailResult = await sendLowAttendanceEmail(
-        student.studentName,
-        student.email,
-        stats.percentage,
+      const emailResult = await sendLowAttendanceEmail({
+        studentName: student.studentName,
+        studentEmail: student.email,
+        registerNumber: student.registerNumber,
+        department: student.department,
+        year: student.year,
+        section: student.section,
+        percentage: stats.percentage,
         threshold,
-        settings,
-        stats.attended,
-        stats.total,
-        student.registerNumber
-      );
+        totalWorkingSessions: stats.totalDays,
+        presentCount: stats.daysPresent,
+        absentCount: stats.daysAbsent,
+        month: warningMonth,
+        warningDate: targetDateStr,
+        smtpSettings: settings,
+      });
 
-      const subjectText = `Monthly Attendance Warning – ${warningMonth} (Below 75%)`;
-      const bodyText = `Dear ${student.studentName},
+      const subjectText = `Monthly Attendance Warning – Attendance Below 75%`;
+      const bodyText = `MONTHLY ATTENDANCE WARNING – ATTENDANCE BELOW 75%
+${settings.senderName || 'College Attendance Portal'}
 
-Your overall attendance percentage for ${warningMonth} is ${stats.percentage}%, which is strictly below the required minimum of ${threshold}%.
+Dear ${student.studentName},
+
+This is an official monthly attendance warning notification for ${warningMonth}. Your overall attendance percentage is ${stats.percentage}%, which is strictly below the required minimum of ${threshold}%.
 
 Student Details:
 - Name: ${student.studentName}
 - Register Number: ${student.registerNumber}
+- Department: ${student.department}
+- Year: ${student.year}
+- Section: ${student.section}
 - Current Attendance: ${stats.percentage}%
-- Minimum Required: ${threshold}%
-- Evaluation Date: ${targetDateStr}
+- Required Minimum: ${threshold}%
+- Total Working Sessions: ${stats.totalDays} Days
+- Days Present (incl. OD): ${stats.daysPresent} Days
+- Days Absent: ${stats.daysAbsent} Days
+- Month: ${warningMonth}
+- Warning Date: ${targetDateStr}
 
-Please contact your Class Representative or Department Head immediately to clarify your attendance status.
+Please contact your Class Representative or Department Administration immediately to clarify your attendance status.
 
 Regards,
-Class Representative Administration`;
+${settings.senderName || 'College Attendance Portal'} Administration`;
 
       await prisma.emailLog.create({
         data: {
