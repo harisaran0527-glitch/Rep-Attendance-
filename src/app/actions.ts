@@ -42,9 +42,11 @@ import {
   getAllTeachers,
   deleteTeacher,
   findTeacherByEmail,
-  normalizeStatus
+  normalizeStatus,
+  invalidateCache
 } from '@/lib/db-api';
 import { sendLowAttendanceEmail } from '@/lib/email';
+import { runMonthlyWarningEmailJob, MonthlyWarningJobOptions } from '@/lib/monthly-scheduler';
 
 export async function getAllStudents() {
   if (!(await isStaffAuthenticated())) {
@@ -417,10 +419,8 @@ export async function saveBulkAttendanceAction(
       }),
     ]);
 
-    // Trigger non-blocking background email warning processing
-    processWarningEmailsBackground(dateString, records).catch((err) =>
-      console.error('Background email notification error:', err)
-    );
+    // Invalidate working dates cache for instant accuracy
+    invalidateCache();
 
     revalidatePath('/attendance');
     revalidatePath('/history');
@@ -530,6 +530,8 @@ export async function clearSavedAttendanceAction(dateString: string) {
     await prisma.attendance.deleteMany({
       where: { date: targetDate },
     });
+
+    invalidateCache();
 
     revalidatePath('/attendance');
     revalidatePath('/history');
@@ -1306,4 +1308,24 @@ export async function getDailyAttendanceSummaryAction(dateString: string) {
     };
   }
 }
+
+export async function triggerMonthlyWarningJobAction(options: { force?: boolean; dryRun?: boolean } = {}) {
+  if (!(await isAdminAuthenticated())) {
+    throw new Error('Unauthorized');
+  }
+
+  try {
+    const summary = await runMonthlyWarningEmailJob({
+      forceRun: options.force ?? true,
+      dryRun: options.dryRun ?? false,
+    });
+    revalidatePath('/emaillogs');
+    revalidatePath('/settings');
+    return { success: true, summary };
+  } catch (error: any) {
+    console.error('Error triggering monthly warning job action:', error);
+    return { success: false, error: error?.message || 'Failed to execute monthly warning job.' };
+  }
+}
+
 

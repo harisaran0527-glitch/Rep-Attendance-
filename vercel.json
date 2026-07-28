@@ -1,0 +1,8 @@
+{
+  "crons": [
+    {
+      "path": "/api/cron/monthly-warning",
+      "schedule": "30 3 27 * *"
+    }
+  ]
+}

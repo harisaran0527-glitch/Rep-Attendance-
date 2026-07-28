@@ -1,5 +1,14 @@
 import { prisma } from './db';
 
+// Versioned in-memory TTL cache for working dates
+let cacheVersion = Date.now();
+let cachedWorkingDates: { version: number; key: string; data: Date[]; expiresAt: number } | null = null;
+
+export function invalidateCache() {
+  cacheVersion = Date.now();
+  cachedWorkingDates = null;
+}
+
 // Helper to normalize date to UTC midnight (00:00:00.000Z) consistently across server & client
 export function normalizeDate(dateInput: Date | string | number): Date {
   if (typeof dateInput === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(dateInput.trim())) {
@@ -89,6 +98,7 @@ export async function updateSmtpSettings(data: {
   lowThreshold: number;
   collegeOpeningDate?: string;
 }) {
+  invalidateCache();
   const updateData: any = {
     host: data.host.trim(),
     port: Number(data.port),
@@ -115,8 +125,27 @@ export async function updateSmtpSettings(data: {
 
 export async function getEmailLogs() {
   return prisma.emailLog.findMany({
-    include: {
-      student: true,
+    select: {
+      id: true,
+      studentId: true,
+      email: true,
+      percentage: true,
+      subject: true,
+      body: true,
+      warningMonth: true,
+      sentAt: true,
+      status: true,
+      student: {
+        select: {
+          id: true,
+          registerNumber: true,
+          studentName: true,
+          email: true,
+          department: true,
+          year: true,
+          section: true,
+        },
+      },
     },
     orderBy: {
       sentAt: 'desc',
@@ -131,6 +160,7 @@ export async function logSentEmail(data: {
   subject: string;
   body: string;
   status: string;
+  warningMonth?: string;
 }) {
   return prisma.emailLog.create({
     data,
@@ -147,7 +177,11 @@ export async function deleteAllEmailLogs() {
   return prisma.emailLog.deleteMany({});
 }
 
-export async function getValidWorkingDates(startDateStr: string, endDateStr?: string, preFetchedStudentCount?: number): Promise<Date[]> {
+export async function getValidWorkingDates(
+  startDateStr: string,
+  endDateStr?: string,
+  preFetchedStudentCount?: number
+): Promise<Date[]> {
   const start = normalizeDate(startDateStr);
   const now = normalizeDate(new Date());
   const requestedEnd = endDateStr ? normalizeDate(endDateStr) : now;
@@ -155,6 +189,18 @@ export async function getValidWorkingDates(startDateStr: string, endDateStr?: st
 
   if (start.getTime() > end.getTime()) {
     return [];
+  }
+
+  const cacheKey = `${start.toISOString()}_${end.toISOString()}_${preFetchedStudentCount ?? 0}`;
+  const nowMs = Date.now();
+
+  if (
+    cachedWorkingDates &&
+    cachedWorkingDates.version === cacheVersion &&
+    cachedWorkingDates.key === cacheKey &&
+    nowMs < cachedWorkingDates.expiresAt
+  ) {
+    return cachedWorkingDates.data;
   }
 
   const totalStudents = preFetchedStudentCount !== undefined ? preFetchedStudentCount : await prisma.student.count();
@@ -173,9 +219,18 @@ export async function getValidWorkingDates(startDateStr: string, endDateStr?: st
     },
   });
 
-  return dateCounts
+  const validDates = dateCounts
     .filter((d) => d._count.id >= threshold)
     .map((d) => d.date);
+
+  cachedWorkingDates = {
+    version: cacheVersion,
+    key: cacheKey,
+    data: validDates,
+    expiresAt: nowMs + 60000, // 60 seconds TTL
+  };
+
+  return validDates;
 }
 
 export async function getWorkingDaysCount(startDateStr: string, endDateStr?: string): Promise<number> {
@@ -204,6 +259,10 @@ export async function calculateOverallAttendance(studentId: number, targetDateIn
         gte: openingDate,
         lte: targetDate,
       },
+    },
+    select: {
+      status: true,
+      date: true,
     },
   });
 
@@ -310,6 +369,7 @@ export async function addStudent(data: {
   year: string;
   section: string;
 }) {
+  invalidateCache();
   return prisma.student.create({
     data: {
       registerNumber: data.registerNumber.trim(),
@@ -335,6 +395,7 @@ export async function editStudent(
     section: string;
   }
 ) {
+  invalidateCache();
   const updateData: any = {
     registerNumber: data.registerNumber.trim(),
     studentName: data.studentName.trim(),
@@ -355,6 +416,7 @@ export async function editStudent(
 }
 
 export async function deleteStudent(id: number) {
+  invalidateCache();
   return prisma.student.delete({
     where: { id },
   });
@@ -362,6 +424,16 @@ export async function deleteStudent(id: number) {
 
 export async function getAllStudents() {
   return prisma.student.findMany({
+    select: {
+      id: true,
+      registerNumber: true,
+      studentName: true,
+      email: true,
+      department: true,
+      year: true,
+      section: true,
+      createdAt: true,
+    },
     orderBy: {
       registerNumber: 'asc',
     },
@@ -382,6 +454,16 @@ export async function searchStudents(query: string) {
         { section: { contains: cleanQuery } },
       ],
     },
+    select: {
+      id: true,
+      registerNumber: true,
+      studentName: true,
+      email: true,
+      department: true,
+      year: true,
+      section: true,
+      createdAt: true,
+    },
     orderBy: {
       registerNumber: 'asc',
     },
@@ -398,10 +480,9 @@ export async function saveAttendance(
   period: number,
   status: AttendanceStatus
 ) {
+  invalidateCache();
   const normalizedDate = normalizeDate(date);
 
-  // If attendance already exists for the same Student, Date, Period, Update the existing record.
-  // Never create duplicate attendance. (Upsert using unique index)
   return prisma.attendance.upsert({
     where: {
       studentId_date: {
@@ -422,6 +503,7 @@ export async function saveAttendance(
 }
 
 export async function updateAttendance(id: number, status: AttendanceStatus) {
+  invalidateCache();
   return prisma.attendance.update({
     where: { id },
     data: { status },
@@ -434,8 +516,23 @@ export async function getAttendanceByDate(date: Date | string) {
     where: {
       date: normalizedDate,
     },
-    include: {
-      student: true,
+    select: {
+      id: true,
+      studentId: true,
+      date: true,
+      period: true,
+      status: true,
+      student: {
+        select: {
+          id: true,
+          registerNumber: true,
+          studentName: true,
+          email: true,
+          department: true,
+          year: true,
+          section: true,
+        },
+      },
     },
   });
 }
@@ -447,8 +544,23 @@ export async function getAttendanceByPeriod(date: Date | string, period: number)
       date: normalizedDate,
       period,
     },
-    include: {
-      student: true,
+    select: {
+      id: true,
+      studentId: true,
+      date: true,
+      period: true,
+      status: true,
+      student: {
+        select: {
+          id: true,
+          registerNumber: true,
+          studentName: true,
+          email: true,
+          department: true,
+          year: true,
+          section: true,
+        },
+      },
     },
   });
 }
@@ -457,6 +569,13 @@ export async function getStudentAttendanceHistory(studentId: number) {
   return prisma.attendance.findMany({
     where: {
       studentId,
+    },
+    select: {
+      id: true,
+      studentId: true,
+      date: true,
+      period: true,
+      status: true,
     },
     orderBy: {
       date: 'desc',
@@ -486,6 +605,13 @@ export async function addTeacher(data: {
 
 export async function getAllTeachers() {
   return prisma.teacher.findMany({
+    select: {
+      id: true,
+      name: true,
+      email: true,
+      department: true,
+      createdAt: true,
+    },
     orderBy: {
       createdAt: 'desc',
     },

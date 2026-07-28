@@ -455,6 +455,74 @@ export default function SettingsPage() {
                 </button>
               </form>
             </div>
+
+            {/* Monthly Warning Scheduler Card */}
+            <div className="glass-card p-6 rounded-3xl space-y-4">
+              <h3 className="text-base font-bold text-slate-100 light:text-slate-900 flex items-center gap-2">
+                <Mail className="w-5 h-5 text-indigo-400" />
+                <span>Monthly Warning Scheduler (27th)</span>
+              </h3>
+              <p className="text-xs text-slate-400 light:text-slate-600 leading-relaxed">
+                Runs automatically on the <strong>27th of every month</strong> (Asia/Kolkata IST) for active students with attendance &lt; 75%.
+              </p>
+
+              <div className="flex flex-col gap-2 pt-2">
+                <button
+                  type="button"
+                  onClick={async () => {
+                    setTesting(true);
+                    setTestSuccess(null);
+                    setTestError(null);
+                    try {
+                      const { triggerMonthlyWarningJobAction } = await import('@/app/actions');
+                      const res = await triggerMonthlyWarningJobAction({ force: true, dryRun: true });
+                      if (res.success && res.summary) {
+                        setTestSuccess(res.summary.message);
+                      } else {
+                        setTestError(res.error || 'Failed to execute dry-run.');
+                      }
+                    } catch (err: any) {
+                      setTestError(err.message || 'Execution error.');
+                    } finally {
+                      setTesting(false);
+                    }
+                  }}
+                  disabled={testing}
+                  className="w-full flex items-center justify-center gap-2 px-4 py-2.5 bg-amber-500/10 hover:bg-amber-500/20 text-amber-400 font-bold rounded-xl text-xs border border-amber-500/20 transition-all cursor-pointer"
+                >
+                  {testing ? <Loader2 className="w-4 h-4 animate-spin" /> : <Mail className="w-4 h-4" />}
+                  <span>Run Dry-Run Audit (No Emails Sent)</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={async () => {
+                    if (!confirm('Are you sure you want to trigger the Monthly Warning Job now for all students below 75%?')) return;
+                    setTesting(true);
+                    setTestSuccess(null);
+                    setTestError(null);
+                    try {
+                      const { triggerMonthlyWarningJobAction } = await import('@/app/actions');
+                      const res = await triggerMonthlyWarningJobAction({ force: true, dryRun: false });
+                      if (res.success && res.summary) {
+                        setTestSuccess(res.summary.message);
+                      } else {
+                        setTestError(res.error || 'Failed to execute job.');
+                      }
+                    } catch (err: any) {
+                      setTestError(err.message || 'Execution error.');
+                    } finally {
+                      setTesting(false);
+                    }
+                  }}
+                  disabled={testing}
+                  className="w-full flex items-center justify-center gap-2 px-4 py-2.5 btn-gradient text-white font-bold rounded-xl text-xs transition-all cursor-pointer shadow-lg shadow-indigo-600/30"
+                >
+                  {testing ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
+                  <span>Trigger Live Monthly Warning Job</span>
+                </button>
+              </div>
+            </div>
           </div>
         </div>
       )}
