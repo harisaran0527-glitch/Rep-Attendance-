@@ -13,11 +13,13 @@ export interface UploadResult {
  */
 function getBlobToken(): string {
   const token = process.env.BLOB_READ_WRITE_TOKEN;
-  console.log("Blob token available:", Boolean(token));
 
   if (!token) {
+    console.error("BLOB_READ_WRITE_TOKEN PRESENT:", false);
     throw new Error("Blob storage is not configured in production");
   }
+
+  console.log("BLOB_READ_WRITE_TOKEN PRESENT:", true);
   return token;
 }
 
