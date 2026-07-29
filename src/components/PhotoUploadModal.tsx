@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useRef, useEffect } from 'react';
-import { X, Upload, Trash2, Camera, Loader2, CheckCircle2, AlertCircle, RefreshCw } from 'lucide-react';
+import { X, Upload, Trash2, Camera, Loader2, CheckCircle2, AlertCircle } from 'lucide-react';
 import StudentAvatar from './StudentAvatar';
 
 interface PhotoUploadModalProps {
@@ -12,6 +12,8 @@ interface PhotoUploadModalProps {
   studentId?: number; // Optional if student uploaded for themselves
   onPhotoUpdated: (newPhotoUrl: string | null) => void;
 }
+
+const MAX_FILE_SIZE = 2 * 1024 * 1024; // 2 MB (2,097,152 bytes)
 
 export default function PhotoUploadModal({
   isOpen,
@@ -47,14 +49,20 @@ export default function PhotoUploadModal({
 
   if (!isOpen) return null;
 
-  // Process image: crop to 400x400 square on canvas
+  // Process image: crop to 400x400 square on canvas with auto-compression if blob exceeds 2 MB
   const processImageFile = (file: File) => {
     setErrorMsg(null);
     setSuccessMsg(null);
 
+    // Temporary logging of file details
+    console.log('File Name:', file.name);
+    console.log('File Size (bytes):', file.size);
+    console.log('File Size (MB):', (file.size / (1024 * 1024)).toFixed(2));
+    console.log('MAX_FILE_SIZE:', MAX_FILE_SIZE);
+
     // Validate size (max 2 MB)
-    if (file.size > 2 * 1024 * 1024) {
-      setErrorMsg('File size exceeds maximum allowed limit of 2 MB.');
+    if (file.size > MAX_FILE_SIZE) {
+      setErrorMsg('Maximum file size is 2 MB');
       return;
     }
 
@@ -89,19 +97,37 @@ export default function PhotoUploadModal({
 
         ctx.drawImage(img, startX, startY, size, size, 0, 0, 400, 400);
 
-        // Convert canvas to data URL preview & Blob
-        const dataUrl = canvas.toDataURL('image/jpeg', 0.9);
+        // Convert canvas to data URL preview
+        const dataUrl = canvas.toDataURL('image/jpeg', 0.85);
         setPreviewUrl(dataUrl);
 
-        canvas.toBlob(
-          (blob) => {
-            if (blob) {
-              setCroppedCanvasBlob(blob);
-            }
-          },
-          'image/jpeg',
-          0.90
-        );
+        // Helper to export blob with automatic compression fallback under 2 MB
+        const exportCompressedBlob = (quality = 0.85) => {
+          canvas.toBlob(
+            (blob) => {
+              if (!blob) {
+                setErrorMsg('Failed to generate image payload.');
+                return;
+              }
+
+              console.log('Generated Blob Size (bytes):', blob.size);
+              console.log('Generated Blob Size (MB):', (blob.size / (1024 * 1024)).toFixed(2));
+
+              if (blob.size > MAX_FILE_SIZE && quality > 0.2) {
+                // Compress further if blob exceeds 2 MB
+                exportCompressedBlob(quality - 0.2);
+              } else if (blob.size > MAX_FILE_SIZE) {
+                setErrorMsg('Maximum file size is 2 MB');
+              } else {
+                setCroppedCanvasBlob(blob);
+              }
+            },
+            'image/jpeg',
+            quality
+          );
+        };
+
+        exportCompressedBlob(0.85);
       };
       img.src = e.target?.result as string;
     };
@@ -118,6 +144,11 @@ export default function PhotoUploadModal({
   const handleSavePhoto = async () => {
     if (!croppedCanvasBlob) {
       setErrorMsg('Please select an image first.');
+      return;
+    }
+
+    if (croppedCanvasBlob.size > MAX_FILE_SIZE) {
+      setErrorMsg('Maximum file size is 2 MB');
       return;
     }
 

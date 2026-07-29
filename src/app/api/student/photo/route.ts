@@ -5,7 +5,7 @@ import { getStudentSession, isStaffAuthenticated } from '@/lib/auth';
 import { uploadProfilePhoto, deleteProfilePhoto } from '@/lib/storage';
 import { getStudentById, updateStudentPhoto } from '@/lib/db-api';
 
-const MAX_FILE_SIZE = 2 * 1024 * 1024; // 2 MB
+const MAX_FILE_SIZE = 2 * 1024 * 1024; // 2 MB (2,097,152 bytes)
 const ALLOWED_MIME_TYPES = [
   'image/jpeg',
   'image/jpg',
@@ -36,6 +36,20 @@ export async function POST(req: NextRequest) {
       );
     }
 
+    // Server-side logging of file size and parameters
+    console.log('Server Received File Name:', file.name);
+    console.log('Server Received File Size (bytes):', file.size);
+    console.log('Server Received File Size (MB):', (file.size / (1024 * 1024)).toFixed(2));
+    console.log('Server MAX_FILE_SIZE:', MAX_FILE_SIZE);
+
+    // Server-side file validation: size and MIME type
+    if (file.size > MAX_FILE_SIZE) {
+      return NextResponse.json(
+        { success: false, error: 'Maximum file size is 2 MB' },
+        { status: 400 }
+      );
+    }
+
     // Determine target student ID securely
     let targetStudentId: number;
     if (studentSession && !isStaff) {
@@ -58,14 +72,6 @@ export async function POST(req: NextRequest) {
       return NextResponse.json(
         { success: false, error: 'Student record not found.' },
         { status: 404 }
-      );
-    }
-
-    // Server-side file validation: size and MIME type
-    if (file.size > MAX_FILE_SIZE) {
-      return NextResponse.json(
-        { success: false, error: 'File size exceeds maximum limit of 2 MB.' },
-        { status: 400 }
       );
     }
 
