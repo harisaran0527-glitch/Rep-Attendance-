@@ -12,11 +12,12 @@ export interface UploadResult {
  * Helper to ensure BLOB_READ_WRITE_TOKEN is present or throw clear error
  */
 function getBlobToken(): string {
-  const token = process.env.BLOB_READ_WRITE_TOKEN;
-  if (!token) {
-    throw new Error('No blob credentials found. Please set BLOB_READ_WRITE_TOKEN in environment variables.');
+  const blobToken = process.env.BLOB_READ_WRITE_TOKEN;
+  if (!blobToken) {
+    console.error("BLOB_READ_WRITE_TOKEN runtime status: MISSING");
+    throw new Error("Blob storage is not configured in production");
   }
-  return token;
+  return blobToken;
 }
 
 /**
@@ -30,15 +31,15 @@ export async function uploadProfilePhoto(
   filename: string,
   mimeType: string
 ): Promise<UploadResult> {
-  const token = getBlobToken();
+  const blobToken = getBlobToken();
   const sanitizedFilename = filename.replace(/[^a-zA-Z0-9_.-]/g, '_');
   const uniqueKey = `profile-photos/${Date.now()}_${sanitizedFilename}`;
 
-  // Use Vercel Blob put with token
+  // Use Vercel Blob put with explicit token
   const blob = await put(uniqueKey, buffer, {
     access: 'public',
     contentType: mimeType,
-    token,
+    token: blobToken,
   });
 
   return {
@@ -55,18 +56,19 @@ export async function deleteProfilePhoto(url: string | null | undefined): Promis
   if (!url) return;
 
   try {
-    const token = process.env.BLOB_READ_WRITE_TOKEN;
-    if (!token) {
+    const blobToken = process.env.BLOB_READ_WRITE_TOKEN;
+    if (!blobToken) {
       console.warn('Cannot delete profile photo from Blob storage: BLOB_READ_WRITE_TOKEN is missing.');
       return;
     }
 
     // Only attempt deletion if it's a Vercel Blob URL or valid cloud URL
     if (url.includes('blob.vercel-storage.com') || url.includes('public.blob')) {
-      await del(url, { token });
+      await del(url, { token: blobToken });
     }
   } catch (error) {
     console.error('Failed to delete previous cloud image:', error);
     // Non-blocking error so profile update can still proceed
   }
 }
+

@@ -1,3 +1,5 @@
+export const dynamic = 'force-dynamic';
+
 import { NextRequest, NextResponse } from 'next/server';
 import { getStudentSession, isStaffAuthenticated } from '@/lib/auth';
 import { uploadProfilePhoto, deleteProfilePhoto } from '@/lib/storage';
