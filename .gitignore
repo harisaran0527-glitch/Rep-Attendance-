@@ -24,3 +24,5 @@ yarn-debug.log*
 .DS_Store
 *.pem
 *.tsbuildinfo
+
+.env*

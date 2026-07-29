@@ -74,7 +74,7 @@ export default function StudentAvatar({
           height={px}
           className="object-cover w-full h-full rounded-full"
           onError={() => setImageError(true)}
-          unoptimized={src.startsWith('data:') || src.startsWith('blob:')}
+          unoptimized={src.startsWith('data:') || src.startsWith('blob:') || src.includes('public.blob') || src.includes('vercel-storage.com')}
         />
       </div>
     );
