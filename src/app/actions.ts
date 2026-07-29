@@ -596,6 +596,7 @@ export async function getSessionStudentDetailsAction(dateString: string) {
         id: true,
         studentName: true,
         registerNumber: true,
+        profilePhotoUrl: true,
       },
       orderBy: { studentName: 'asc' },
     });
@@ -625,6 +626,7 @@ export async function getSessionStudentDetailsAction(dateString: string) {
       studentName: s.studentName,
       registerNumber: s.registerNumber,
       status: statusMap[s.id] || 'Unmarked',
+      profilePhotoUrl: s.profilePhotoUrl,
     }));
 
     return { success: true, data: list };
@@ -943,6 +945,7 @@ export async function getStudentProfileStatsAction() {
       department: student.department,
       year: student.year,
       section: student.section,
+      profilePhotoUrl: student.profilePhotoUrl,
     },
     stats: {
       percentage: stats.percentage,

@@ -22,9 +22,12 @@ import {
   Upload,
   ChevronUp,
   ChevronDown,
+  Camera,
   Eye,
   EyeOff,
 } from 'lucide-react';
+import StudentAvatar from '@/components/StudentAvatar';
+import PhotoUploadModal from '@/components/PhotoUploadModal';
 import * as XLSX from 'xlsx';
 
 interface Student {
@@ -35,6 +38,7 @@ interface Student {
   department: string;
   year: string;
   section: string;
+  profilePhotoUrl?: string | null;
   percentage?: number;
 }
 
@@ -66,6 +70,9 @@ export default function StudentsPage() {
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc');
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage, setItemsPerPage] = useState(10);
+
+  // Photo Modal state
+  const [photoModalStudent, setPhotoModalStudent] = useState<Student | null>(null);
 
   // Delete Confirm state
   const [deleteConfirmId, setDeleteConfirmId] = useState<number | null>(null);
@@ -368,7 +375,22 @@ export default function StudentsPage() {
                         {student.registerNumber}
                       </td>
                       <td className="px-6 py-4 font-bold text-slate-100 light:text-slate-900">
-                        {student.studentName}
+                        <div className="flex items-center gap-3">
+                          <button
+                            type="button"
+                            onClick={() => setPhotoModalStudent(student)}
+                            className="relative group shrink-0 rounded-full focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                            title="Manage photo"
+                          >
+                            <StudentAvatar
+                              src={student.profilePhotoUrl}
+                              name={student.studentName}
+                              size="sm"
+                              className="group-hover:opacity-80 transition"
+                            />
+                          </button>
+                          <span>{student.studentName}</span>
+                        </div>
                       </td>
                       <td className="px-6 py-4 text-slate-400 light:text-slate-600 text-xs">{student.email || '-'}</td>
                       <td className="px-6 py-4 text-slate-400 light:text-slate-600 font-medium">{student.department}</td>
@@ -388,6 +410,13 @@ export default function StudentsPage() {
                       {!isTeacher && (
                         <td className="px-6 py-4 text-right">
                           <div className="flex items-center justify-end gap-2">
+                            <button
+                              onClick={() => setPhotoModalStudent(student)}
+                              className="p-2 text-slate-400 hover:text-emerald-400 rounded-xl hover:bg-emerald-500/10 transition-all cursor-pointer"
+                              title="Manage Student Photo"
+                            >
+                              <Camera className="w-4 h-4" />
+                            </button>
                             <button
                               onClick={() => openEditModal(student)}
                               className="p-2 text-slate-400 hover:text-indigo-400 rounded-xl hover:bg-indigo-500/10 transition-all cursor-pointer"
@@ -660,6 +689,24 @@ export default function StudentsPage() {
             </div>
           </div>
         </div>
+      )}
+      {/* Admin Photo Upload & Management Modal */}
+      {photoModalStudent && (
+        <PhotoUploadModal
+          isOpen={!!photoModalStudent}
+          onClose={() => setPhotoModalStudent(null)}
+          studentName={photoModalStudent.studentName}
+          currentPhotoUrl={photoModalStudent.profilePhotoUrl}
+          studentId={photoModalStudent.id}
+          onPhotoUpdated={(newUrl) => {
+            setStudents((prev) =>
+              prev.map((s) =>
+                s.id === photoModalStudent.id ? { ...s, profilePhotoUrl: newUrl } : s
+              )
+            );
+            fetchStudents();
+          }}
+        />
       )}
     </div>
   );

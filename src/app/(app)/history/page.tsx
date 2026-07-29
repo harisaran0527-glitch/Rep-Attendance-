@@ -26,6 +26,7 @@ import {
 } from 'lucide-react';
 import { shareStatusCardAsImage } from '@/lib/nativeShare';
 import { normalizeStatus } from '@/lib/db-api';
+import StudentAvatar from '@/components/StudentAvatar';
 
 interface AttendanceSession {
   id: string;
@@ -47,6 +48,7 @@ interface StudentDetailRecord {
   studentName: string;
   registerNumber: string;
   status: string;
+  profilePhotoUrl?: string | null;
 }
 
 export default function HistoryPage() {
@@ -584,7 +586,14 @@ export default function HistoryPage() {
                                 >
                                   <td className="px-6 py-3.5 text-slate-500 font-mono font-bold">{idx + 1}</td>
                                   <td className="px-6 py-3.5 font-bold text-slate-100 light:text-slate-900">
-                                    {student.studentName}
+                                    <div className="flex items-center gap-3">
+                                      <StudentAvatar
+                                        src={student.profilePhotoUrl}
+                                        name={student.studentName}
+                                        size="xs"
+                                      />
+                                      <span>{student.studentName}</span>
+                                    </div>
                                   </td>
                                   <td className="px-6 py-3.5 font-mono text-indigo-400 light:text-indigo-600 font-bold">
                                     {student.registerNumber}

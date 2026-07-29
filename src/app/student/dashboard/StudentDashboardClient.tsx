@@ -23,6 +23,9 @@ import {
 } from 'lucide-react';
 import { isSundayDate, isHoliday } from '@/lib/holidays';
 import ThemeToggle from '@/components/ThemeToggle';
+import StudentAvatar from '@/components/StudentAvatar';
+import PhotoUploadModal from '@/components/PhotoUploadModal';
+import { Camera } from 'lucide-react';
 
 interface StudentData {
   id: number;
@@ -32,6 +35,7 @@ interface StudentData {
   year: string;
   section: string;
   email: string;
+  profilePhotoUrl?: string | null;
 }
 
 interface StatsData {
@@ -82,6 +86,9 @@ export default function StudentDashboardClient({
 }: StudentDashboardClientProps) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
+
+  const [photoUrl, setPhotoUrl] = useState<string | null>(student.profilePhotoUrl || null);
+  const [isPhotoModalOpen, setIsPhotoModalOpen] = useState(false);
 
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState('ALL');
@@ -304,16 +311,42 @@ export default function StudentDashboardClient({
           {/* Profile Card */}
           <div className="glass-card rounded-3xl p-6 flex flex-col justify-between shadow-xl">
             <div>
-              <div className="flex items-center justify-between pb-4 mb-4 border-b border-slate-800 light:border-slate-200">
-                <span className="text-xs font-extrabold uppercase tracking-wider text-slate-400 light:text-slate-600 flex items-center gap-2">
-                  <User className="w-4 h-4 text-indigo-400" /> Profile Information
-                </span>
-                <span className="px-2.5 py-1 rounded-full bg-indigo-500/10 text-indigo-400 border border-indigo-500/20 text-xs font-bold">
-                  {student.year} Year
-                </span>
+              <div className="flex items-center gap-4 pb-4 mb-4 border-b border-slate-800 light:border-slate-200">
+                <div
+                  className="relative group cursor-pointer shrink-0"
+                  onClick={() => setIsPhotoModalOpen(true)}
+                  title="Click to change profile photo"
+                >
+                  <StudentAvatar
+                    src={photoUrl}
+                    name={student.studentName}
+                    size="xl"
+                    className="ring-2 ring-indigo-500/40 shadow-lg"
+                  />
+                  <div className="absolute inset-0 bg-black/50 rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+                    <Camera className="w-5 h-5 text-white" />
+                  </div>
+                </div>
+
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center justify-between gap-1">
+                    <h2 className="text-lg font-bold text-slate-100 light:text-slate-900 truncate">{student.studentName}</h2>
+                    <span className="px-2 py-0.5 rounded-full bg-indigo-500/10 text-indigo-400 border border-indigo-500/20 text-[10px] font-bold shrink-0">
+                      {student.year} Yr
+                    </span>
+                  </div>
+                  <p className="text-xs text-indigo-400 font-mono font-bold mt-0.5">{student.registerNumber}</p>
+                  
+                  <button
+                    type="button"
+                    onClick={() => setIsPhotoModalOpen(true)}
+                    className="mt-2 inline-flex items-center gap-1.5 text-xs font-semibold text-indigo-400 hover:text-indigo-300 transition hover:underline"
+                  >
+                    <Camera className="w-3.5 h-3.5" />
+                    {photoUrl ? 'Change Photo' : 'Upload Photo'}
+                  </button>
+                </div>
               </div>
-              <h2 className="text-xl font-bold text-slate-100 light:text-slate-900">{student.studentName}</h2>
-              <p className="text-xs text-indigo-400 font-mono font-bold mt-1">{student.registerNumber}</p>
 
               <div className="mt-6 space-y-3 text-xs">
                 <div className="flex justify-between py-1.5 border-b border-slate-800/60 light:border-slate-200">
@@ -570,6 +603,15 @@ export default function StudentDashboardClient({
           </div>
         )}
       </main>
+
+      {/* Photo Upload & Management Modal */}
+      <PhotoUploadModal
+        isOpen={isPhotoModalOpen}
+        onClose={() => setIsPhotoModalOpen(false)}
+        studentName={student.studentName}
+        currentPhotoUrl={photoUrl}
+        onPhotoUpdated={(newUrl) => setPhotoUrl(newUrl)}
+      />
     </div>
   );
 }

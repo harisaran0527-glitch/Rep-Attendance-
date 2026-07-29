@@ -25,6 +25,8 @@ model Student {
   department     String
   year           String
   section        String
+  profilePhotoUrl String?
+  profilePhotoPublicId String?
   createdAt      DateTime     @default(now())
   attendances    Attendance[]
   emailLogs      EmailLog[]

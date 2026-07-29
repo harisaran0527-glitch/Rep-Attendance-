@@ -144,6 +144,7 @@ export async function getEmailLogs() {
           department: true,
           year: true,
           section: true,
+          profilePhotoUrl: true,
         },
       },
     },
@@ -422,6 +423,39 @@ export async function deleteStudent(id: number) {
   });
 }
 
+export async function getStudentById(id: number) {
+  return prisma.student.findUnique({
+    where: { id },
+    select: {
+      id: true,
+      registerNumber: true,
+      studentName: true,
+      email: true,
+      department: true,
+      year: true,
+      section: true,
+      profilePhotoUrl: true,
+      profilePhotoPublicId: true,
+      createdAt: true,
+    },
+  });
+}
+
+export async function updateStudentPhoto(
+  id: number,
+  profilePhotoUrl: string | null,
+  profilePhotoPublicId?: string | null
+) {
+  invalidateCache();
+  return prisma.student.update({
+    where: { id },
+    data: {
+      profilePhotoUrl,
+      profilePhotoPublicId: profilePhotoPublicId !== undefined ? profilePhotoPublicId : null,
+    },
+  });
+}
+
 export async function getAllStudents() {
   return prisma.student.findMany({
     select: {
@@ -432,6 +466,8 @@ export async function getAllStudents() {
       department: true,
       year: true,
       section: true,
+      profilePhotoUrl: true,
+      profilePhotoPublicId: true,
       createdAt: true,
     },
     orderBy: {
@@ -462,6 +498,8 @@ export async function searchStudents(query: string) {
       department: true,
       year: true,
       section: true,
+      profilePhotoUrl: true,
+      profilePhotoPublicId: true,
       createdAt: true,
     },
     orderBy: {
@@ -531,6 +569,7 @@ export async function getAttendanceByDate(date: Date | string) {
           department: true,
           year: true,
           section: true,
+          profilePhotoUrl: true,
         },
       },
     },
@@ -559,6 +598,7 @@ export async function getAttendanceByPeriod(date: Date | string, period: number)
           department: true,
           year: true,
           section: true,
+          profilePhotoUrl: true,
         },
       },
     },

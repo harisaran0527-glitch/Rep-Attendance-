@@ -27,6 +27,7 @@ import {
   Info,
 } from 'lucide-react';
 import { isSundayDate, isSaturdayDate, isHoliday } from '@/lib/holidays';
+import StudentAvatar from '@/components/StudentAvatar';
 
 interface Student {
   id: number;
@@ -35,6 +36,7 @@ interface Student {
   department: string;
   year: string;
   section: string;
+  profilePhotoUrl?: string | null;
   percentage?: number;
 }
 
@@ -474,18 +476,27 @@ export default function AttendancePage() {
                   return (
                     <tr key={student.id} className="hover:bg-slate-800/10 light:hover:bg-slate-50 transition-colors">
                       <td className="px-6 py-4">
-                        <div className="font-bold text-slate-100 light:text-slate-900 flex items-center gap-2">
-                          {student.studentName}
-                          {student.percentage !== undefined && (
-                            <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
-                              student.percentage >= 75 ? 'bg-emerald-500/15 text-emerald-400' : 'bg-rose-500/15 text-rose-400'
-                            }`}>
-                              {student.percentage}%
-                            </span>
-                          )}
-                        </div>
-                        <div className="text-xs text-slate-400 light:text-slate-600 font-mono mt-0.5">
-                          {student.registerNumber} &bull; {student.department} {student.year} Sec {student.section}
+                        <div className="flex items-center gap-3">
+                          <StudentAvatar
+                            src={student.profilePhotoUrl}
+                            name={student.studentName}
+                            size="md"
+                          />
+                          <div>
+                            <div className="font-bold text-slate-100 light:text-slate-900 flex items-center gap-2">
+                              {student.studentName}
+                              {student.percentage !== undefined && (
+                                <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                                  student.percentage >= 75 ? 'bg-emerald-500/15 text-emerald-400' : 'bg-rose-500/15 text-rose-400'
+                                }`}>
+                                  {student.percentage}%
+                                </span>
+                              )}
+                            </div>
+                            <div className="text-xs text-slate-400 light:text-slate-600 font-mono mt-0.5">
+                              {student.registerNumber} &bull; {student.department} {student.year} Sec {student.section}
+                            </div>
+                          </div>
                         </div>
                       </td>
                       <td className="px-6 py-4">
