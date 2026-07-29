@@ -12,9 +12,10 @@ export interface UploadResult {
  * Helper to ensure BLOB_READ_WRITE_TOKEN is present or throw clear error
  */
 function getBlobToken(): string {
-  const token = process.env['BLOB_READ_WRITE_TOKEN'] || process.env.BLOB_READ_WRITE_TOKEN;
+  const token = process.env.BLOB_READ_WRITE_TOKEN;
+  console.log("Blob token available:", Boolean(token));
+
   if (!token) {
-    console.error("BLOB_READ_WRITE_TOKEN runtime status: MISSING");
     throw new Error("Blob storage is not configured in production");
   }
   return token;
@@ -56,7 +57,7 @@ export async function deleteProfilePhoto(url: string | null | undefined): Promis
   if (!url) return;
 
   try {
-    const token = process.env['BLOB_READ_WRITE_TOKEN'] || process.env.BLOB_READ_WRITE_TOKEN;
+    const token = process.env.BLOB_READ_WRITE_TOKEN;
     if (!token) {
       console.warn('Cannot delete profile photo from Blob storage: BLOB_READ_WRITE_TOKEN is missing.');
       return;
@@ -71,5 +72,3 @@ export async function deleteProfilePhoto(url: string | null | undefined): Promis
     // Non-blocking error so profile update can still proceed
   }
 }
-
-
