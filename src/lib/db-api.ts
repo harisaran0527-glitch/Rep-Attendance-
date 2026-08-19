@@ -204,8 +204,7 @@ export async function getValidWorkingDates(
     return cachedWorkingDates.data;
   }
 
-  const totalStudents = preFetchedStudentCount !== undefined ? preFetchedStudentCount : await prisma.student.count();
-  const threshold = totalStudents > 0 ? totalStudents : 1; // 100% of active students must be marked for a valid working day
+  const threshold = 1; // Any date with at least 1 marked student is a conducted working date
 
   const dateCounts = await prisma.attendance.groupBy({
     by: ['date'],
@@ -248,6 +247,10 @@ export async function calculateOverallAttendance(studentId: number, targetDateIn
   const requestedTarget = targetDateInput ? normalizeDate(targetDateInput) : now;
   const targetDate = requestedTarget.getTime() > now.getTime() ? now : requestedTarget;
 
+  // Get valid working dates
+  const validDates = await getValidWorkingDates(openingDateStr, targetDate.toISOString().split('T')[0]);
+  const validDateTimes = new Set(validDates.map((d) => d.getTime()));
+
   // Query attendance ONLY for this specific student from openingDate up to targetDate
   const attendances = await prisma.attendance.findMany({
     where: { 
@@ -263,36 +266,37 @@ export async function calculateOverallAttendance(studentId: number, targetDateIn
     },
   });
 
+  // Only consider attendance records that fall on a valid working day
+  const validAttendances = attendances.filter((a) => validDateTimes.has(a.date.getTime()));
+
   const attendedStatuses = ['Present', 'On Duty (OD)', 'Medical Leave (ML)', 'Medical Leave'];
   const absentStatuses = ['Absent', 'Long Absent'];
 
-  const studentAttendances = attendances.filter((a) => {
-    const s = a.status;
-    return attendedStatuses.includes(s) || absentStatuses.includes(s);
-  });
-
   // Total Days Present for THIS individual student
-  const daysPresent = studentAttendances.filter((a) => attendedStatuses.includes(a.status)).length;
+  const daysPresent = validAttendances.filter((a) => attendedStatuses.includes(a.status)).length;
   
   // Total Days Absent (working days minus present days)
-  const daysAbsent = studentAttendances.filter((a) => absentStatuses.includes(a.status)).length;
+  const daysAbsent = validAttendances.filter((a) => absentStatuses.includes(a.status)).length;
   
-  const totalSavedDays = daysPresent + daysAbsent;
+  const savedRows = validAttendances.length;
+  const missing = Math.max(0, validDates.length - savedRows);
 
   // Rule: Before attendance starts (0 marked dates), display 100%. Once attendance starts (1+ marked dates), calculate real percentage to 2 decimal places.
-  const percentage = totalSavedDays === 0 
+  const percentage = validDates.length === 0 
     ? 100.0 
-    : Math.round((daysPresent / totalSavedDays) * 10000) / 100;
+    : Math.round((daysPresent / validDates.length) * 10000) / 100;
 
   return {
     percentage,
     attended: daysPresent,
-    total: totalSavedDays,
+    total: validDates.length,
     absent: daysAbsent,
     daysPresent,
     daysAbsent,
-    totalDays: totalSavedDays,
+    totalDays: validDates.length,
     openingDate: openingDateStr,
+    savedRows,
+    missing,
   };
 }
 
@@ -305,10 +309,12 @@ export async function calculateAllStudentsAttendanceStats(targetDateInput?: Date
   const requestedTarget = targetDateInput ? normalizeDate(targetDateInput) : now;
   const targetDate = requestedTarget.getTime() > now.getTime() ? now : requestedTarget;
 
+  const validDates = await getValidWorkingDates(openingDateStr, targetDate.toISOString().split('T')[0]);
+  const totalWorkingDays = validDates.length;
+
   const whereClause: any = {
     date: {
-      gte: openingDate,
-      lte: targetDate,
+      in: validDates,
     },
   };
 
@@ -327,7 +333,9 @@ export async function calculateAllStudentsAttendanceStats(targetDateInput?: Date
   const attendedStatuses = ['Present', 'On Duty (OD)', 'Medical Leave (ML)', 'Medical Leave'];
   const absentStatuses = ['Absent', 'Long Absent'];
 
-  const studentStatsMap: Record<number, { attended: number; absent: number; total: number }> = {};
+  const studentAttendedMap: Record<number, number> = {};
+  const studentAbsentMap: Record<number, number> = {};
+  const studentSavedCountMap: Record<number, number> = {};
 
   allAttendances.forEach((att) => {
     const s = att.status;
@@ -335,36 +343,37 @@ export async function calculateAllStudentsAttendanceStats(targetDateInput?: Date
     const isAbsent = absentStatuses.includes(s);
 
     if (isAttended || isAbsent) {
-      if (!studentStatsMap[att.studentId]) {
-        studentStatsMap[att.studentId] = { attended: 0, absent: 0, total: 0 };
-      }
+      studentSavedCountMap[att.studentId] = (studentSavedCountMap[att.studentId] || 0) + 1;
       if (isAttended) {
-        studentStatsMap[att.studentId].attended++;
+        studentAttendedMap[att.studentId] = (studentAttendedMap[att.studentId] || 0) + 1;
       } else {
-        studentStatsMap[att.studentId].absent++;
+        studentAbsentMap[att.studentId] = (studentAbsentMap[att.studentId] || 0) + 1;
       }
-      studentStatsMap[att.studentId].total++;
     }
   });
 
   return {
     settings,
-    totalWorkingDays: 0,
-    validDates: [],
+    totalWorkingDays,
+    validDates,
     getStudentStats: (studentId: number) => {
-      const stats = studentStatsMap[studentId] || { attended: 0, absent: 0, total: 0 };
-      const percentage = stats.total > 0
-        ? Math.round((stats.attended / stats.total) * 10000) / 100
+      const attended = studentAttendedMap[studentId] || 0;
+      const absent = studentAbsentMap[studentId] || 0;
+      const savedRows = studentSavedCountMap[studentId] || 0;
+      const percentage = totalWorkingDays > 0
+        ? Math.round((attended / totalWorkingDays) * 10000) / 100
         : 100.0;
 
       return {
         percentage,
-        attended: stats.attended,
-        total: stats.total,
-        absent: stats.absent,
-        daysPresent: stats.attended,
-        daysAbsent: stats.absent,
-        totalDays: stats.total,
+        attended,
+        total: totalWorkingDays,
+        absent,
+        daysPresent: attended,
+        daysAbsent: absent,
+        totalDays: totalWorkingDays,
+        savedRows,
+        missing: Math.max(0, totalWorkingDays - savedRows),
       };
     },
   };

@@ -373,7 +373,7 @@ export default function StudentDashboardClient({
               </div>
               <div className="mt-4">
                 <span className="text-3xl font-black text-emerald-400">{stats.attended}</span>
-                <span className="block text-[10px] text-emerald-400/80 mt-1">Present / OD sessions</span>
+                <span className="block text-[10px] text-emerald-400/80 mt-1">Present / OD / ML sessions</span>
               </div>
             </div>
 
