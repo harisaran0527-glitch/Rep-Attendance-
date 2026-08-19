@@ -108,9 +108,7 @@ export async function getAllStudentsWithStats() {
 // AUTH ACTIONS
 // ==========================================
 
-export async function loginAction(formData: FormData) {
-  const email = formData.get('email') as string;
-  const password = formData.get('password') as string;
+export async function loginAction(email: string, password: string) {
 
   if (!email || !password) {
     return { success: false, error: 'Email and password are required.' };
@@ -841,9 +839,7 @@ export async function getRecentActivityAction() {
 // STUDENT PORTAL ACTIONS
 // ==========================================
 
-export async function studentLoginAction(formData: FormData) {
-  const email = formData.get('email') as string;
-  const password = formData.get('password') as string;
+export async function studentLoginAction(email: string, password: string) {
 
   if (!email || !password) {
     return { success: false, error: 'Email and password are required.' };
@@ -1044,9 +1040,7 @@ export async function getStudentMonthlyStatsAction() {
 // TEACHER ACTIONS
 // ==========================================
 
-export async function teacherLoginAction(formData: FormData) {
-  const email = formData.get('email') as string;
-  const password = formData.get('password') as string;
+export async function teacherLoginAction(email: string, password: string) {
 
   if (!email || !password) {
     return { success: false, error: 'Email and password are required.' };

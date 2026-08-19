@@ -44,9 +44,11 @@ export default function StudentLoginPageClient() {
     setError(null);
 
     const formData = new FormData(e.currentTarget);
+    const email = formData.get('email') as string;
+    const password = formData.get('password') as string;
     startTransition(async () => {
       try {
-        const result = await studentLoginAction(formData);
+        const result = await studentLoginAction(email, password);
         if (result.success) {
           window.location.href = '/student/dashboard';
         } else {

@@ -1,0 +1,18 @@
+[
+  {
+    "id": 3,
+    "name": "Class representative",
+    "email": "harisaran@gmail.com",
+    "password": "eec516271c53f6b411ad37c32096ac57ee433b03f3890167932f9b6c0f20999ca8c5d9cabf68a9d7c8b7513949c63abd9498f5fb5ae4beb27231d63e8acbce68",
+    "department": "AI&DS",
+    "createdAt": "2026-07-29T01:42:03.704Z"
+  },
+  {
+    "id": 4,
+    "name": "Ramya",
+    "email": "ramya@gmail.com",
+    "password": "7ed71535ad2fd2f1665fc68cf2b029bce1c10153317374ac12f3e23e6626932e1b7eb3123ca22c887ab492119d85c71e1e6a0347b6354d26e18829cdfc74d4e3",
+    "department": "AI&DS",
+    "createdAt": "2026-07-29T01:42:49.052Z"
+  }
+]

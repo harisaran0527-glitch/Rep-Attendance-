@@ -17,9 +17,11 @@ export default function TeacherLoginPageClient() {
     setError(null);
 
     const formData = new FormData(e.currentTarget);
+    const email = formData.get('email') as string;
+    const password = formData.get('password') as string;
     startTransition(async () => {
       try {
-        const result = await teacherLoginAction(formData);
+        const result = await teacherLoginAction(email, password);
         if (result.success) {
           window.location.href = '/';
         } else {

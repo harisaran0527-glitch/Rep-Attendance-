@@ -17,8 +17,10 @@ export default function LoginPageClient() {
     setLoading(true);
 
     const formData = new FormData(event.currentTarget);
+    const email = formData.get('email') as string;
+    const password = formData.get('password') as string;
     try {
-      const result = await loginAction(formData);
+      const result = await loginAction(email, password);
       if (result.success) {
         window.location.href = '/';
       } else {

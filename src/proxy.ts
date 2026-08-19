@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
 
-export function middleware(request: NextRequest) {
+export function proxy(request: NextRequest) {
   const adminSession = request.cookies.get('admin_session')?.value;
   const teacherSession = request.cookies.get('teacher_session')?.value;
   const studentSession = request.cookies.get('student_session')?.value;
@@ -60,4 +60,3 @@ export function middleware(request: NextRequest) {
 export const config = {
   matcher: ['/((?!api|_next/static|_next/image|favicon.ico).*)'],
 };
-
