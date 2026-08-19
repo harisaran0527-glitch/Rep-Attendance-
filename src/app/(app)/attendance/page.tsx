@@ -210,12 +210,6 @@ export default function AttendancePage() {
         status: attendance[s.id] as AttendanceStatus,
       }));
 
-    if (records.length !== students.length) {
-      setErrorMsg(`Save aborted: ${students.length - records.length} student(s) have an invalid status.`);
-      setIsSaving(false);
-      return;
-    }
-
     try {
       const result = await saveBulkAttendanceAction(date, records);
       if (result.success) {
@@ -224,7 +218,7 @@ export default function AttendancePage() {
           : 'Attendance saved successfully.';
         setSuccessMsg(msg);
         setIsExisting(true);
-        setSavedRecordCount(students.length);
+        setSavedRecordCount(records.length);
         if (result.updatedStudents) {
           setStudents(result.updatedStudents);
         } else {

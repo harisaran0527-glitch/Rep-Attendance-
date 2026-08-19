@@ -69,17 +69,15 @@ export async function getAllStudentsWithStats() {
     ]);
 
     const openingDateStr = settings.collegeOpeningDate || '2026-07-13';
+    const openingDate = normalizeDate(openingDateStr);
     const now = normalizeDate(new Date());
 
-    // 2. Get valid working dates (passing pre-fetched student count to avoid extra count query)
-    const validDates = await getValidWorkingDates(openingDateStr, now.toISOString().split('T')[0], students.length);
-    const totalWorkingDays = validDates.length;
-
-    // 3. Bulk fetch attendance records on valid working dates
+    // 2. Fetch all attendance records from openingDate to now
     const allAttendances = await prisma.attendance.findMany({
       where: {
         date: {
-          in: validDates,
+          gte: openingDate,
+          lte: now,
         },
       },
       select: {
@@ -88,30 +86,43 @@ export async function getAllStudentsWithStats() {
       },
     });
 
-    const attendedStatuses = ['Present', 'On Duty (OD)'];
+    const attendedStatuses = ['Present', 'On Duty (OD)', 'Medical Leave (ML)', 'Medical Leave'];
+    const absentStatuses = ['Absent', 'Long Absent'];
 
-    // Map present count per studentId
-    const presentCountMap: Record<number, number> = {};
+    // Map stats per studentId
+    const studentStatsMap: Record<number, { attended: number; absent: number; total: number }> = {};
     allAttendances.forEach((att) => {
-      if (attendedStatuses.includes(att.status)) {
-        presentCountMap[att.studentId] = (presentCountMap[att.studentId] || 0) + 1;
+      const s = att.status;
+      const isAttended = attendedStatuses.includes(s);
+      const isAbsent = absentStatuses.includes(s);
+
+      if (isAttended || isAbsent) {
+        if (!studentStatsMap[att.studentId]) {
+          studentStatsMap[att.studentId] = { attended: 0, absent: 0, total: 0 };
+        }
+        if (isAttended) {
+          studentStatsMap[att.studentId].attended++;
+        } else {
+          studentStatsMap[att.studentId].absent++;
+        }
+        studentStatsMap[att.studentId].total++;
       }
     });
 
     // Map all students
     const results = students.map((student) => {
-      const attended = presentCountMap[student.id] || 0;
-      const percentage = totalWorkingDays > 0 
-        ? Math.round((attended / totalWorkingDays) * 10000) / 100 
+      const stats = studentStatsMap[student.id] || { attended: 0, absent: 0, total: 0 };
+      const percentage = stats.total > 0 
+        ? Math.round((stats.attended / stats.total) * 10000) / 100 
         : 100.0;
 
       return {
         ...student,
         percentage,
-        attended,
-        totalClasses: totalWorkingDays,
-        daysPresent: attended,
-        daysAbsent: Math.max(0, totalWorkingDays - attended),
+        attended: stats.attended,
+        totalClasses: stats.total,
+        daysPresent: stats.attended,
+        daysAbsent: stats.absent,
       };
     });
 
@@ -967,20 +978,22 @@ export async function getStudentHistoryAction() {
 
   const settings = await getSmtpSettings();
   const openingDateStr = settings.collegeOpeningDate || '2026-07-13';
-  const validDates = await getValidWorkingDates(openingDateStr);
-  const validDateTimes = new Set(validDates.map((d) => d.getTime()));
+  const openingDate = normalizeDate(openingDateStr);
 
   const attendances = await prisma.attendance.findMany({
     where: {
       studentId: session.studentId,
       date: {
-        gte: ATTENDANCE_START_DATE,
+        gte: openingDate,
       },
     },
     orderBy: { date: 'desc' },
   });
 
-  const validAttendances = attendances.filter((att) => validDateTimes.has(att.date.getTime()));
+  const validAttendances = attendances.filter((att) => {
+    const s = att.status;
+    return s !== 'Unmarked' && s !== 'unmarked';
+  });
 
   return validAttendances.map((att) => ({
     id: att.id,
@@ -1016,36 +1029,41 @@ export async function getStudentMonthlyStatsAction() {
 
   const settings = await getSmtpSettings();
   const openingDateStr = settings.collegeOpeningDate || '2026-07-13';
-  const validDates = await getValidWorkingDates(openingDateStr);
-  const validDateTimes = new Set(validDates.map((d) => d.getTime()));
+  const openingDate = normalizeDate(openingDateStr);
 
   const attendances = await prisma.attendance.findMany({
     where: {
       studentId: session.studentId,
       date: {
-        gte: ATTENDANCE_START_DATE,
+        gte: openingDate,
       },
     },
     orderBy: { date: 'asc' },
   });
 
-  const validAttendances = attendances.filter((att) => validDateTimes.has(att.date.getTime()));
+  const attendedStatuses = ['Present', 'On Duty (OD)', 'Medical Leave (ML)', 'Medical Leave'];
+  const absentStatuses = ['Absent', 'Long Absent'];
 
   const monthlyData: Record<string, { total: number; attended: number; monthName: string }> = {};
 
-  validAttendances.forEach((a) => {
-    const dateObj = new Date(a.date);
-    const yearMonth = `${dateObj.getFullYear()}-${String(dateObj.getMonth() + 1).padStart(2, '0')}`;
-    const monthName = dateObj.toLocaleString('default', { month: 'short', year: '2-digit' });
+  attendances.forEach((a) => {
+    const s = a.status;
+    const isAttended = attendedStatuses.includes(s);
+    const isAbsent = absentStatuses.includes(s);
 
-    if (!monthlyData[yearMonth]) {
-      monthlyData[yearMonth] = { total: 0, attended: 0, monthName };
-    }
+    if (isAttended || isAbsent) {
+      const dateObj = new Date(a.date);
+      const yearMonth = `${dateObj.getFullYear()}-${String(dateObj.getMonth() + 1).padStart(2, '0')}`;
+      const monthName = dateObj.toLocaleString('default', { month: 'short', year: '2-digit' });
 
-    monthlyData[yearMonth].total++;
-    const attendedStatuses = ['Present', 'On Duty (OD)'];
-    if (attendedStatuses.includes(a.status)) {
-      monthlyData[yearMonth].attended++;
+      if (!monthlyData[yearMonth]) {
+        monthlyData[yearMonth] = { total: 0, attended: 0, monthName };
+      }
+
+      monthlyData[yearMonth].total++;
+      if (isAttended) {
+        monthlyData[yearMonth].attended++;
+      }
     }
   });
 
@@ -1055,7 +1073,7 @@ export async function getStudentMonthlyStatsAction() {
     month: stats.monthName,
     attended: stats.attended,
     total: stats.total,
-    percentage: stats.total > 0 ? Math.round((stats.attended / stats.total) * 100) : 100,
+    percentage: stats.total > 0 ? Math.round((stats.attended / stats.total) * 10000) / 100 : 100.0,
   }));
 
   return results;
