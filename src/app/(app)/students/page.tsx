@@ -38,6 +38,7 @@ interface Student {
   department: string;
   year: string;
   section: string;
+  studentType?: string;
   profilePhotoUrl?: string | null;
   percentage?: number;
 }
@@ -64,6 +65,7 @@ export default function StudentsPage() {
   const [department, setDepartment] = useState('');
   const [year, setYear] = useState('');
   const [section, setSection] = useState('');
+  const [studentType, setStudentType] = useState('REGULAR');
 
   // Sorting & Pagination States
   const [sortField, setSortField] = useState<'registerNumber' | 'studentName' | 'department' | 'percentage'>('registerNumber');
@@ -107,6 +109,7 @@ export default function StudentsPage() {
     setDepartment('');
     setYear('');
     setSection('');
+    setStudentType('REGULAR');
     setModalError(null);
     setIsModalOpen(true);
   };
@@ -121,6 +124,7 @@ export default function StudentsPage() {
     setDepartment(student.department);
     setYear(student.year);
     setSection(student.section);
+    setStudentType(student.studentType || 'REGULAR');
     setModalError(null);
     setIsModalOpen(true);
   };
@@ -138,6 +142,7 @@ export default function StudentsPage() {
       department,
       year,
       section,
+      studentType,
     };
 
     try {
@@ -635,6 +640,20 @@ export default function StudentsPage() {
                     className="w-full px-3 py-2 bg-slate-950/50 light:bg-slate-100 border border-slate-800 light:border-slate-300 rounded-xl text-slate-100 light:text-slate-900 text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-indigo-500"
                   />
                 </div>
+              </div>
+
+              <div>
+                <label className="block text-[10px] font-extrabold uppercase tracking-wider text-slate-400 light:text-slate-600 mb-1">
+                  Student Type *
+                </label>
+                <select
+                  value={studentType}
+                  onChange={(e) => setStudentType(e.target.value)}
+                  className="w-full px-3.5 py-2.5 bg-slate-950/50 light:bg-slate-100 border border-slate-800 light:border-slate-300 rounded-xl text-slate-100 light:text-slate-900 text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                >
+                  <option value="REGULAR">Regular Student</option>
+                  <option value="LATERAL_ENTRY">Lateral Entry Student</option>
+                </select>
               </div>
 
               <div className="pt-2 flex gap-3">

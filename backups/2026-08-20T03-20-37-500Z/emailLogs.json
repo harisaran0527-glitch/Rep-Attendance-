@@ -1,0 +1,134 @@
+[
+  {
+    "id": 61,
+    "studentId": 3,
+    "email": "rishiraj.ad25@avsenggcollege.ac.in",
+    "percentage": 63.64,
+    "subject": "Attendance Warning – Below 75%",
+    "body": "Dear RISHIRAJ G,\n\nYour current attendance percentage is 63.64%, which is below the required 75%.\n\nPlease improve your attendance and contact your class representative if you need clarification.\n\nStudent Register Number: 25AI&DS132\nCurrent Attendance: 63.64%\n\nRegards,\nClass Representative",
+    "warningMonth": null,
+    "sentAt": "2026-07-27T04:10:55.284Z",
+    "status": "Simulated"
+  },
+  {
+    "id": 62,
+    "studentId": 10,
+    "email": "sanju.ad25@avsenggcollege.ac.in",
+    "percentage": 72.73,
+    "subject": "Attendance Warning – Below 75%",
+    "body": "Dear SANJU A,\n\nYour current attendance percentage is 72.73%, which is below the required 75%.\n\nPlease improve your attendance and contact your class representative if you need clarification.\n\nStudent Register Number: 25AI&DS139\nCurrent Attendance: 72.73%\n\nRegards,\nClass Representative",
+    "warningMonth": null,
+    "sentAt": "2026-07-27T04:21:32.657Z",
+    "status": "Simulated"
+  },
+  {
+    "id": 63,
+    "studentId": 12,
+    "email": "santhoshkumars.ad25@avsenggcollege.ac.in",
+    "percentage": 72.73,
+    "subject": "Attendance Warning – Below 75%",
+    "body": "Dear SANTHOSH KUMAR S,\n\nYour current attendance percentage is 72.73%, which is below the required 75%.\n\nPlease improve your attendance and contact your class representative if you need clarification.\n\nStudent Register Number: 25AI&DS141\nCurrent Attendance: 72.73%\n\nRegards,\nClass Representative",
+    "warningMonth": null,
+    "sentAt": "2026-07-27T04:21:39.102Z",
+    "status": "Simulated"
+  },
+  {
+    "id": 64,
+    "studentId": 3,
+    "email": "rishiraj.ad25@avsenggcollege.ac.in",
+    "percentage": 58.33,
+    "subject": "Attendance Warning – Below 75%",
+    "body": "Dear RISHIRAJ G,\n\nYour current attendance percentage is 58.33%, which is below the required 75%.\n\nPlease improve your attendance and contact your class representative if you need clarification.\n\nStudent Register Number: 25AI&DS132\nCurrent Attendance: 58.33%\n\nRegards,\nClass Representative",
+    "warningMonth": null,
+    "sentAt": "2026-07-28T04:24:39.999Z",
+    "status": "Simulated"
+  },
+  {
+    "id": 65,
+    "studentId": 3,
+    "email": "rishiraj.ad25@avsenggcollege.ac.in",
+    "percentage": 58.33,
+    "subject": "Monthly Attendance Warning – 2026-07 (Below 75%)",
+    "body": "Dear RISHIRAJ G,\n\nYour overall attendance percentage for 2026-07 is 58.33%, which is strictly below the required minimum of 75%.\n\nStudent Details:\n- Name: RISHIRAJ G\n- Register Number: 25AI&DS132\n- Current Attendance: 58.33%\n- Minimum Required: 75%\n- Evaluation Date: 2026-07-28\n\nPlease contact your Class Representative or Department Head immediately to clarify your attendance status.\n\nRegards,\nClass Representative Administration",
+    "warningMonth": "2026-07",
+    "sentAt": "2026-07-28T06:48:24.633Z",
+    "status": "Simulated"
+  },
+  {
+    "id": 66,
+    "studentId": 15,
+    "email": "sarang.ad25@avsenggcollege.ac.in",
+    "percentage": 66.67,
+    "subject": "Monthly Attendance Warning – 2026-07 (Below 75%)",
+    "body": "Dear SARAN G,\n\nYour overall attendance percentage for 2026-07 is 66.67%, which is strictly below the required minimum of 75%.\n\nStudent Details:\n- Name: SARAN G\n- Register Number: 25AI&DS144\n- Current Attendance: 66.67%\n- Minimum Required: 75%\n- Evaluation Date: 2026-07-28\n\nPlease contact your Class Representative or Department Head immediately to clarify your attendance status.\n\nRegards,\nClass Representative Administration",
+    "warningMonth": "2026-07",
+    "sentAt": "2026-07-28T06:48:24.771Z",
+    "status": "Simulated"
+  },
+  {
+    "id": 67,
+    "studentId": 16,
+    "email": "sarans.ad25@avsenggcollege.ac.in",
+    "percentage": 8.33,
+    "subject": "Monthly Attendance Warning – 2026-07 (Below 75%)",
+    "body": "Dear SARAN S,\n\nYour overall attendance percentage for 2026-07 is 8.33%, which is strictly below the required minimum of 75%.\n\nStudent Details:\n- Name: SARAN S\n- Register Number: 25AI&DS145\n- Current Attendance: 8.33%\n- Minimum Required: 75%\n- Evaluation Date: 2026-07-28\n\nPlease contact your Class Representative or Department Head immediately to clarify your attendance status.\n\nRegards,\nClass Representative Administration",
+    "warningMonth": "2026-07",
+    "sentAt": "2026-07-28T06:48:24.834Z",
+    "status": "Simulated"
+  },
+  {
+    "id": 68,
+    "studentId": 27,
+    "email": "sivanisri.ad25@avsenggcollege.ac.in",
+    "percentage": 58.33,
+    "subject": "Monthly Attendance Warning – 2026-07 (Below 75%)",
+    "body": "Dear SIVANI SRI V S,\n\nYour overall attendance percentage for 2026-07 is 58.33%, which is strictly below the required minimum of 75%.\n\nStudent Details:\n- Name: SIVANI SRI V S\n- Register Number: 25AI&DS156\n- Current Attendance: 58.33%\n- Minimum Required: 75%\n- Evaluation Date: 2026-07-28\n\nPlease contact your Class Representative or Department Head immediately to clarify your attendance status.\n\nRegards,\nClass Representative Administration",
+    "warningMonth": "2026-07",
+    "sentAt": "2026-07-28T06:48:24.926Z",
+    "status": "Simulated"
+  },
+  {
+    "id": 69,
+    "studentId": 35,
+    "email": "syedadhipibrahim.ad25@avsenggcollege.ac.in",
+    "percentage": 58.33,
+    "subject": "Monthly Attendance Warning – 2026-07 (Below 75%)",
+    "body": "Dear SYED ADHIP IBRAHIM A,\n\nYour overall attendance percentage for 2026-07 is 58.33%, which is strictly below the required minimum of 75%.\n\nStudent Details:\n- Name: SYED ADHIP IBRAHIM A\n- Register Number: 25AI&DS165\n- Current Attendance: 58.33%\n- Minimum Required: 75%\n- Evaluation Date: 2026-07-28\n\nPlease contact your Class Representative or Department Head immediately to clarify your attendance status.\n\nRegards,\nClass Representative Administration",
+    "warningMonth": "2026-07",
+    "sentAt": "2026-07-28T06:48:25.035Z",
+    "status": "Simulated"
+  },
+  {
+    "id": 70,
+    "studentId": 36,
+    "email": "thangavel.ad25@avsenggcollege.ac.in",
+    "percentage": 58.33,
+    "subject": "Monthly Attendance Warning – 2026-07 (Below 75%)",
+    "body": "Dear THANGAVEL V,\n\nYour overall attendance percentage for 2026-07 is 58.33%, which is strictly below the required minimum of 75%.\n\nStudent Details:\n- Name: THANGAVEL V\n- Register Number: 25AI&DS166\n- Current Attendance: 58.33%\n- Minimum Required: 75%\n- Evaluation Date: 2026-07-28\n\nPlease contact your Class Representative or Department Head immediately to clarify your attendance status.\n\nRegards,\nClass Representative Administration",
+    "warningMonth": "2026-07",
+    "sentAt": "2026-07-28T06:48:25.117Z",
+    "status": "Simulated"
+  },
+  {
+    "id": 71,
+    "studentId": 38,
+    "email": "thaynammai.ad25@avsenggcollege.ac.in",
+    "percentage": 58.33,
+    "subject": "Monthly Attendance Warning – 2026-07 (Below 75%)",
+    "body": "Dear THAYNAMMAI R M,\n\nYour overall attendance percentage for 2026-07 is 58.33%, which is strictly below the required minimum of 75%.\n\nStudent Details:\n- Name: THAYNAMMAI R M\n- Register Number: 25AI&DS168\n- Current Attendance: 58.33%\n- Minimum Required: 75%\n- Evaluation Date: 2026-07-28\n\nPlease contact your Class Representative or Department Head immediately to clarify your attendance status.\n\nRegards,\nClass Representative Administration",
+    "warningMonth": "2026-07",
+    "sentAt": "2026-07-28T06:48:25.239Z",
+    "status": "Simulated"
+  },
+  {
+    "id": 72,
+    "studentId": 41,
+    "email": "thiruniraiselvan.ad25@avsenggcollege.ac.in",
+    "percentage": 58.33,
+    "subject": "Monthly Attendance Warning – 2026-07 (Below 75%)",
+    "body": "Dear THIRUNIRAISELVAN A,\n\nYour overall attendance percentage for 2026-07 is 58.33%, which is strictly below the required minimum of 75%.\n\nStudent Details:\n- Name: THIRUNIRAISELVAN A\n- Register Number: 25AI&DS171\n- Current Attendance: 58.33%\n- Minimum Required: 75%\n- Evaluation Date: 2026-07-28\n\nPlease contact your Class Representative or Department Head immediately to clarify your attendance status.\n\nRegards,\nClass Representative Administration",
+    "warningMonth": "2026-07",
+    "sentAt": "2026-07-28T06:48:25.336Z",
+    "status": "Simulated"
+  }
+]

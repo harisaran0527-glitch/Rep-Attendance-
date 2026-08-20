@@ -1,0 +1,15 @@
+[
+  {
+    "id": 1,
+    "host": "smtp.gmail.com",
+    "port": 587,
+    "secure": false,
+    "user": "",
+    "password": "",
+    "senderName": "College Attendance Portal",
+    "senderEmail": "",
+    "lowThreshold": 75,
+    "collegeOpeningDate": "2026-07-13",
+    "lastMonthlyWarningRun": "2026-07"
+  }
+]

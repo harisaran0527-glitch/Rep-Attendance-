@@ -143,6 +143,7 @@ export async function addStudentAction(data: {
   department: string;
   year: string;
   section: string;
+  studentType?: string;
 }) {
   if (!(await isAdminAuthenticated())) {
     throw new Error('Unauthorized');
@@ -183,6 +184,7 @@ export async function addBulkStudentsAction(studentsList: {
   department: string;
   year: string;
   section: string;
+  studentType?: string;
 }[]) {
   if (!(await isAdminAuthenticated())) {
     throw new Error('Unauthorized');
@@ -227,6 +229,7 @@ export async function editStudentAction(
     department: string;
     year: string;
     section: string;
+    studentType?: string;
   }
 ) {
   if (!(await isAdminAuthenticated())) {
@@ -481,7 +484,7 @@ export async function getAttendanceForDateAction(dateString: string) {
   }
 }
 
-export async function getAllAttendanceSessionsAction() {
+export async function getAllAttendanceSessionsAction(studentTypeFilter?: string) {
   if (!(await isStaffAuthenticated())) {
     throw new Error('Unauthorized');
   }
@@ -491,15 +494,23 @@ export async function getAllAttendanceSessionsAction() {
     const openingDateStr = settings.collegeOpeningDate || '2026-07-13';
     const openingDate = normalizeDate(openingDateStr);
 
+    const whereClause: any = {
+      date: {
+        gte: openingDate,
+      },
+    };
+
+    if (studentTypeFilter && studentTypeFilter !== 'ALL') {
+      whereClause.student = {
+        studentType: studentTypeFilter,
+      };
+    }
+
     const [totalStudents, groupCounts] = await Promise.all([
-      prisma.student.count(),
+      prisma.student.count(studentTypeFilter && studentTypeFilter !== 'ALL' ? { where: { studentType: studentTypeFilter } } : undefined),
       prisma.attendance.groupBy({
         by: ['date', 'status'],
-        where: {
-          date: {
-            gte: openingDate,
-          },
-        },
+        where: whereClause,
         _count: {
           id: true,
         },
@@ -935,9 +946,15 @@ export async function getStudentHistoryAction() {
     throw new Error('Unauthorized');
   }
 
+  const student = await prisma.student.findUnique({
+    where: { id: session.studentId },
+    select: { studentType: true },
+  });
+  const studentType = student?.studentType || 'REGULAR';
+
   const settings = await getSmtpSettings();
   const openingDateStr = settings.collegeOpeningDate || '2026-07-13';
-  const validDates = await getValidWorkingDates(openingDateStr);
+  const validDates = await getValidWorkingDates(openingDateStr, undefined, studentType);
 
   const attendances = await prisma.attendance.findMany({
     where: {
@@ -981,9 +998,15 @@ export async function getStudentMonthlyStatsAction() {
     throw new Error('Unauthorized');
   }
 
+  const student = await prisma.student.findUnique({
+    where: { id: session.studentId },
+    select: { studentType: true },
+  });
+  const studentType = student?.studentType || 'REGULAR';
+
   const settings = await getSmtpSettings();
   const openingDateStr = settings.collegeOpeningDate || '2026-07-13';
-  const validDates = await getValidWorkingDates(openingDateStr);
+  const validDates = await getValidWorkingDates(openingDateStr, undefined, studentType);
 
   const attendances = await prisma.attendance.findMany({
     where: {
@@ -1131,7 +1154,7 @@ export async function checkUserRoleAction() {
   return { success: true, isAdmin, isTeacher };
 }
 
-export async function getDailyAttendanceSummaryAction(dateString: string) {
+export async function getDailyAttendanceSummaryAction(dateString: string, studentTypeFilter?: string) {
   try {
     if (!(await isStaffAuthenticated())) {
       return {
@@ -1147,8 +1170,14 @@ export async function getDailyAttendanceSummaryAction(dateString: string) {
 
     const targetDate = normalizeDate(new Date(dateString));
 
-    // Fetch all active students
+    const whereStudent: any = {};
+    if (studentTypeFilter && studentTypeFilter !== 'ALL') {
+      whereStudent.studentType = studentTypeFilter;
+    }
+
+    // Fetch active students (optionally filtered by cohort)
     const students = await prisma.student.findMany({
+      where: whereStudent,
       orderBy: { registerNumber: 'asc' },
     });
 

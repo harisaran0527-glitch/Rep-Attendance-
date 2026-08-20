@@ -27,12 +27,14 @@ model Student {
   section        String
   profilePhotoUrl String?
   profilePhotoPublicId String?
+  studentType    String       @default("REGULAR") // "REGULAR" | "LATERAL_ENTRY"
   createdAt      DateTime     @default(now())
   attendances    Attendance[]
   emailLogs      EmailLog[]
 
   @@index([registerNumber])
   @@index([department, year, section])
+  @@index([studentType])
 }
 
 model Attendance {

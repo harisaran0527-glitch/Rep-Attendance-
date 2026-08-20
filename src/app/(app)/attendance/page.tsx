@@ -127,8 +127,8 @@ export default function AttendancePage() {
   };
 
   const handleMarkAllPresent = () => {
-    const updated: AttendanceMap = {};
-    students.forEach((s) => {
+    const updated: AttendanceMap = { ...attendance };
+    filteredStudents.forEach((s) => {
       updated[s.id] = 'Present';
     });
     setAttendance(updated);
@@ -248,12 +248,16 @@ export default function AttendancePage() {
     return status;
   };
 
-  const filteredStudents = students.filter((s) => {
+  const [cohortFilter, setCohortFilter] = useState<'REGULAR' | 'LATERAL_ENTRY' | 'ALL'>('REGULAR');
+
+  const filteredStudents = students.filter((s: any) => {
     const q = searchQuery.toLowerCase();
-    return (
+    const matchesSearch =
       s.registerNumber.toLowerCase().includes(q) ||
-      s.studentName.toLowerCase().includes(q)
-    );
+      s.studentName.toLowerCase().includes(q);
+    const sType = s.studentType || 'REGULAR';
+    const matchesCohort = cohortFilter === 'ALL' || sType === cohortFilter;
+    return matchesSearch && matchesCohort;
   });
 
   const hasAnyMarked = markedCount > 0;
@@ -419,16 +423,55 @@ export default function AttendancePage() {
 
       {/* Main Student Attendance Table Workspace */}
       <div className="glass-card rounded-3xl overflow-hidden shadow-xl border border-slate-800 light:border-slate-200">
-        <div className="p-4 bg-slate-950/40 light:bg-slate-100/50 border-b border-slate-800 light:border-slate-200 flex flex-col sm:flex-row items-start sm:items-center gap-3 justify-between">
-          <div className="relative w-full sm:w-72">
-            <Search className="h-4 w-4 text-slate-500 absolute left-3 top-3 pointer-events-none" />
-            <input
-              type="text"
-              placeholder="Filter by name or roll no..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="block w-full pl-9 pr-4 py-2 bg-slate-900/60 light:bg-white border border-slate-700/60 light:border-slate-300 rounded-xl text-slate-100 light:text-slate-900 placeholder-slate-500 text-xs focus:outline-none focus:ring-2 focus:ring-indigo-500"
-            />
+        <div className="p-4 bg-slate-950/40 light:bg-slate-100/50 border-b border-slate-800 light:border-slate-200 flex flex-col md:flex-row items-start md:items-center gap-3 justify-between">
+          <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 w-full md:w-auto">
+            <div className="relative w-full sm:w-64">
+              <Search className="h-4 w-4 text-slate-500 absolute left-3 top-3 pointer-events-none" />
+              <input
+                type="text"
+                placeholder="Filter by name or roll no..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="block w-full pl-9 pr-4 py-2 bg-slate-900/60 light:bg-white border border-slate-700/60 light:border-slate-300 rounded-xl text-slate-100 light:text-slate-900 placeholder-slate-500 text-xs focus:outline-none focus:ring-2 focus:ring-indigo-500"
+              />
+            </div>
+
+            {/* Student Type Cohort Filter Selector */}
+            <div className="flex items-center gap-1.5 p-1 bg-slate-900/80 light:bg-white rounded-xl border border-slate-700/60 light:border-slate-300">
+              <button
+                type="button"
+                onClick={() => setCohortFilter('REGULAR')}
+                className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                  cohortFilter === 'REGULAR'
+                    ? 'bg-indigo-600 text-white shadow-md'
+                    : 'text-slate-400 hover:text-slate-200 light:text-slate-600'
+                }`}
+              >
+                Regular ({students.filter((s: any) => (s.studentType || 'REGULAR') === 'REGULAR').length})
+              </button>
+              <button
+                type="button"
+                onClick={() => setCohortFilter('LATERAL_ENTRY')}
+                className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                  cohortFilter === 'LATERAL_ENTRY'
+                    ? 'bg-indigo-600 text-white shadow-md'
+                    : 'text-slate-400 hover:text-slate-200 light:text-slate-600'
+                }`}
+              >
+                Lateral Entry ({students.filter((s: any) => s.studentType === 'LATERAL_ENTRY').length})
+              </button>
+              <button
+                type="button"
+                onClick={() => setCohortFilter('ALL')}
+                className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                  cohortFilter === 'ALL'
+                    ? 'bg-indigo-600 text-white shadow-md'
+                    : 'text-slate-400 hover:text-slate-200 light:text-slate-600'
+                }`}
+              >
+                All ({students.length})
+              </button>
+            </div>
           </div>
 
           <div className="flex items-center gap-3 text-xs font-semibold text-slate-400">

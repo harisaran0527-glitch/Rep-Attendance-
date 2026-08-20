@@ -74,11 +74,13 @@ export default function HistoryPage() {
   // React Refs for specific status detail card DOM elements
   const statusCardRefMap = useRef<Record<string, HTMLDivElement | null>>({});
 
+  const [cohortFilter, setCohortFilter] = useState<'ALL' | 'REGULAR' | 'LATERAL_ENTRY'>('ALL');
+
   // Load all sessions directly from Neon PostgreSQL
-  const loadSessionsData = async () => {
+  const loadSessionsData = async (filter: string = cohortFilter) => {
     setLoading(true);
     try {
-      const res = await getAllAttendanceSessionsAction();
+      const res = await getAllAttendanceSessionsAction(filter);
       if (res.success && res.data) {
         setSessions(res.data);
       }
@@ -90,8 +92,8 @@ export default function HistoryPage() {
   };
 
   useEffect(() => {
-    loadSessionsData();
-  }, []);
+    loadSessionsData(cohortFilter);
+  }, [cohortFilter]);
 
   // Fetch student details if not already cached
   const ensureStudentDetailsLoaded = async (sessionId: string, sessionDate: string) => {
@@ -291,6 +293,43 @@ export default function HistoryPage() {
               Clear Date
             </button>
           )}
+
+          {/* Student Type Cohort Filter Selector */}
+          <div className="flex items-center gap-1.5 p-1 bg-slate-900/80 light:bg-white rounded-xl border border-slate-700/60 light:border-slate-300">
+            <button
+              type="button"
+              onClick={() => setCohortFilter('ALL')}
+              className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                cohortFilter === 'ALL'
+                  ? 'bg-indigo-600 text-white shadow-md'
+                  : 'text-slate-400 hover:text-slate-200 light:text-slate-600'
+              }`}
+            >
+              All
+            </button>
+            <button
+              type="button"
+              onClick={() => setCohortFilter('REGULAR')}
+              className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                cohortFilter === 'REGULAR'
+                  ? 'bg-indigo-600 text-white shadow-md'
+                  : 'text-slate-400 hover:text-slate-200 light:text-slate-600'
+              }`}
+            >
+              Regular Cohort
+            </button>
+            <button
+              type="button"
+              onClick={() => setCohortFilter('LATERAL_ENTRY')}
+              className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                cohortFilter === 'LATERAL_ENTRY'
+                  ? 'bg-indigo-600 text-white shadow-md'
+                  : 'text-slate-400 hover:text-slate-200 light:text-slate-600'
+              }`}
+            >
+              Lateral Entry Cohort
+            </button>
+          </div>
         </div>
 
         <span className="text-xs text-slate-400 light:text-slate-600 font-semibold">

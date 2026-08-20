@@ -181,7 +181,7 @@ export async function deleteAllEmailLogs() {
 export async function getValidWorkingDates(
   startDateStr: string,
   endDateStr?: string,
-  preFetchedStudentCount?: number
+  studentType?: string
 ): Promise<Date[]> {
   const start = normalizeDate(startDateStr);
   const now = normalizeDate(new Date());
@@ -192,7 +192,7 @@ export async function getValidWorkingDates(
     return [];
   }
 
-  const cacheKey = `${start.toISOString()}_${end.toISOString()}_${preFetchedStudentCount ?? 0}`;
+  const cacheKey = `${start.toISOString()}_${end.toISOString()}_${studentType || 'ALL'}`;
   const nowMs = Date.now();
 
   if (
@@ -204,23 +204,29 @@ export async function getValidWorkingDates(
     return cachedWorkingDates.data;
   }
 
-  const threshold = 1; // Any date with at least 1 marked student is a conducted working date
+  const whereClause: any = {
+    date: {
+      gte: start,
+      lte: end,
+    },
+  };
+
+  if (studentType) {
+    whereClause.student = {
+      studentType: studentType,
+    };
+  }
 
   const dateCounts = await prisma.attendance.groupBy({
     by: ['date'],
-    where: {
-      date: {
-        gte: start,
-        lte: end,
-      },
-    },
+    where: whereClause,
     _count: {
       id: true,
     },
   });
 
   const validDates = dateCounts
-    .filter((d) => d._count.id >= threshold)
+    .filter((d) => d._count.id >= 1)
     .map((d) => d.date);
 
   cachedWorkingDates = {
@@ -233,8 +239,8 @@ export async function getValidWorkingDates(
   return validDates;
 }
 
-export async function getWorkingDaysCount(startDateStr: string, endDateStr?: string): Promise<number> {
-  const dates = await getValidWorkingDates(startDateStr, endDateStr);
+export async function getWorkingDaysCount(startDateStr: string, endDateStr?: string, studentType?: string): Promise<number> {
+  const dates = await getValidWorkingDates(startDateStr, endDateStr, studentType);
   return dates.length;
 }
 
@@ -247,8 +253,14 @@ export async function calculateOverallAttendance(studentId: number, targetDateIn
   const requestedTarget = targetDateInput ? normalizeDate(targetDateInput) : now;
   const targetDate = requestedTarget.getTime() > now.getTime() ? now : requestedTarget;
 
-  // Get valid working dates
-  const validDates = await getValidWorkingDates(openingDateStr, targetDate.toISOString().split('T')[0]);
+  const student = await prisma.student.findUnique({
+    where: { id: studentId },
+    select: { studentType: true },
+  });
+  const studentType = student?.studentType || 'REGULAR';
+
+  // Get valid working dates SPECIFIC to student's cohort
+  const validDates = await getValidWorkingDates(openingDateStr, targetDate.toISOString().split('T')[0], studentType);
   const validDateTimes = new Set(validDates.map((d) => d.getTime()));
 
   // Query attendance ONLY for this specific student from openingDate up to targetDate
@@ -266,7 +278,7 @@ export async function calculateOverallAttendance(studentId: number, targetDateIn
     },
   });
 
-  // Only consider attendance records that fall on a valid working day
+  // Only consider attendance records that fall on a valid working day for this cohort
   const validAttendances = attendances.filter((a) => validDateTimes.has(a.date.getTime()));
 
   const attendedStatuses = ['Present', 'On Duty (OD)', 'Medical Leave (ML)', 'Medical Leave'];
@@ -275,13 +287,12 @@ export async function calculateOverallAttendance(studentId: number, targetDateIn
   // Total Days Present for THIS individual student
   const daysPresent = validAttendances.filter((a) => attendedStatuses.includes(a.status)).length;
   
-  // Total Days Absent (working days minus present days)
+  // Total Days Absent
   const daysAbsent = validAttendances.filter((a) => absentStatuses.includes(a.status)).length;
   
   const savedRows = validAttendances.length;
   const missing = Math.max(0, validDates.length - savedRows);
 
-  // Rule: Before attendance starts (0 marked dates), display 100%. Once attendance starts (1+ marked dates), calculate real percentage to 2 decimal places.
   const percentage = validDates.length === 0 
     ? 100.0 
     : Math.round((daysPresent / validDates.length) * 10000) / 100;
@@ -297,6 +308,7 @@ export async function calculateOverallAttendance(studentId: number, targetDateIn
     openingDate: openingDateStr,
     savedRows,
     missing,
+    studentType,
   };
 }
 
@@ -309,24 +321,31 @@ export async function calculateAllStudentsAttendanceStats(targetDateInput?: Date
   const requestedTarget = targetDateInput ? normalizeDate(targetDateInput) : now;
   const targetDate = requestedTarget.getTime() > now.getTime() ? now : requestedTarget;
 
-  const validDates = await getValidWorkingDates(openingDateStr, targetDate.toISOString().split('T')[0]);
-  const totalWorkingDays = validDates.length;
+  // Calculate valid working dates for BOTH cohorts independently
+  const [regularValidDates, lateralValidDates] = await Promise.all([
+    getValidWorkingDates(openingDateStr, targetDate.toISOString().split('T')[0], 'REGULAR'),
+    getValidWorkingDates(openingDateStr, targetDate.toISOString().split('T')[0], 'LATERAL_ENTRY'),
+  ]);
 
-  const whereClause: any = {
-    date: {
-      in: validDates,
-    },
-  };
+  const regularDateTimes = new Set(regularValidDates.map((d) => d.getTime()));
+  const lateralDateTimes = new Set(lateralValidDates.map((d) => d.getTime()));
 
-  if (studentIds && studentIds.length > 0) {
-    whereClause.studentId = { in: studentIds };
-  }
+  const students = await prisma.student.findMany({
+    select: { id: true, studentType: true },
+    ...(studentIds && studentIds.length > 0 ? { where: { id: { in: studentIds } } } : {}),
+  });
+
+  const studentTypeMap = new Map<number, string>();
+  students.forEach((s) => studentTypeMap.set(s.id, s.studentType || 'REGULAR'));
 
   const allAttendances = await prisma.attendance.findMany({
-    where: whereClause,
+    where: {
+      ...(studentIds && studentIds.length > 0 ? { studentId: { in: studentIds } } : {}),
+    },
     select: {
       studentId: true,
       status: true,
+      date: true,
     },
   });
 
@@ -338,6 +357,11 @@ export async function calculateAllStudentsAttendanceStats(targetDateInput?: Date
   const studentSavedCountMap: Record<number, number> = {};
 
   allAttendances.forEach((att) => {
+    const sType = studentTypeMap.get(att.studentId) || 'REGULAR';
+    const validDateSet = sType === 'LATERAL_ENTRY' ? lateralDateTimes : regularDateTimes;
+
+    if (!validDateSet.has(att.date.getTime())) return;
+
     const s = att.status;
     const isAttended = attendedStatuses.includes(s);
     const isAbsent = absentStatuses.includes(s);
@@ -354,9 +378,14 @@ export async function calculateAllStudentsAttendanceStats(targetDateInput?: Date
 
   return {
     settings,
-    totalWorkingDays,
-    validDates,
+    totalWorkingDays: regularValidDates.length,
+    regularWorkingDays: regularValidDates.length,
+    lateralWorkingDays: lateralValidDates.length,
+    regularValidDates,
+    lateralValidDates,
     getStudentStats: (studentId: number) => {
+      const sType = studentTypeMap.get(studentId) || 'REGULAR';
+      const totalWorkingDays = sType === 'LATERAL_ENTRY' ? lateralValidDates.length : regularValidDates.length;
       const attended = studentAttendedMap[studentId] || 0;
       const absent = studentAbsentMap[studentId] || 0;
       const savedRows = studentSavedCountMap[studentId] || 0;
@@ -374,6 +403,7 @@ export async function calculateAllStudentsAttendanceStats(targetDateInput?: Date
         totalDays: totalWorkingDays,
         savedRows,
         missing: Math.max(0, totalWorkingDays - savedRows),
+        studentType: sType,
       };
     },
   };
@@ -391,6 +421,7 @@ export async function addStudent(data: {
   department: string;
   year: string;
   section: string;
+  studentType?: string;
 }) {
   invalidateCache();
   return prisma.student.create({
@@ -402,6 +433,7 @@ export async function addStudent(data: {
       department: data.department.trim(),
       year: data.year.trim(),
       section: data.section.trim(),
+      studentType: data.studentType || 'REGULAR',
     },
   });
 }
@@ -416,6 +448,7 @@ export async function editStudent(
     department: string;
     year: string;
     section: string;
+    studentType?: string;
   }
 ) {
   invalidateCache();
@@ -430,6 +463,9 @@ export async function editStudent(
 
   if (data.password) {
     updateData.password = data.password;
+  }
+  if (data.studentType) {
+    updateData.studentType = data.studentType;
   }
 
   return prisma.student.update({
@@ -456,6 +492,7 @@ export async function getStudentById(id: number) {
       department: true,
       year: true,
       section: true,
+      studentType: true,
       profilePhotoUrl: true,
       profilePhotoPublicId: true,
       createdAt: true,
@@ -488,6 +525,7 @@ export async function getAllStudents() {
       department: true,
       year: true,
       section: true,
+      studentType: true,
       profilePhotoUrl: true,
       profilePhotoPublicId: true,
       createdAt: true,
@@ -510,6 +548,7 @@ export async function searchStudents(query: string) {
         { department: { contains: cleanQuery } },
         { year: { contains: cleanQuery } },
         { section: { contains: cleanQuery } },
+        { studentType: { contains: cleanQuery } },
       ],
     },
     select: {
@@ -520,6 +559,7 @@ export async function searchStudents(query: string) {
       department: true,
       year: true,
       section: true,
+      studentType: true,
       profilePhotoUrl: true,
       profilePhotoPublicId: true,
       createdAt: true,
