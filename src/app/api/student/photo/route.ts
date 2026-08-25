@@ -13,6 +13,13 @@ const ALLOWED_MIME_TYPES = [
   'image/webp',
 ];
 
+export async function GET() {
+  const token = process.env.BLOB_READ_WRITE_TOKEN || process.env['BLOB_READ_WRITE_TOKEN'];
+  return NextResponse.json({
+    hasBlobToken: typeof token === 'string' && token.trim().length > 0,
+  });
+}
+
 export async function POST(req: NextRequest) {
   try {
     const studentSession = await getStudentSession();
