@@ -8,7 +8,7 @@ if (typeof window !== 'undefined') {
   throw new Error('Blob storage operations can only be executed on the server side.');
 }
 
-import { put, del, PutCommandOptions } from '@vercel/blob';
+import { put, del } from '@vercel/blob';
 
 export interface UploadResult {
   url: string;
@@ -16,15 +16,17 @@ export interface UploadResult {
 }
 
 /**
- * Gets the secure server-side BLOB_READ_WRITE_TOKEN from environment variables if available.
+ * Gets the secure server-side BLOB_READ_WRITE_TOKEN from environment variables.
+ * Throws BLOB_STORAGE_NOT_CONFIGURED if token is missing or empty.
  */
-function getBlobToken(): string | undefined {
-  const token = process.env.BLOB_READ_WRITE_TOKEN || process.env['BLOB_READ_WRITE_TOKEN'];
+function getBlobToken(): string {
+  const token = process.env.BLOB_READ_WRITE_TOKEN?.trim() || process.env['BLOB_READ_WRITE_TOKEN']?.trim();
 
-  if (token && typeof token === 'string' && token.trim().length > 0) {
-    return token.trim();
+  if (!token || token.length === 0) {
+    throw new Error('BLOB_STORAGE_NOT_CONFIGURED: BLOB_READ_WRITE_TOKEN is missing or empty in environment.');
   }
-  return undefined;
+
+  return token;
 }
 
 /**
@@ -44,30 +46,25 @@ export async function uploadProfilePhoto(
   const sanitizedFilename = filename.replace(/[^a-zA-Z0-9_.-]/g, '_');
   const uniqueKey = `profile-photos/${Date.now()}_${sanitizedFilename}`;
 
-  console.log('[storage] Uploading profile photo:', uniqueKey, token ? '(has explicit token)' : '(no explicit token)');
+  // Safe diagnostics (never logging token value)
+  console.log('[storage] Uploading profile photo with explicit token:', {
+    hasToken: Boolean(token),
+    tokenLength: token.length,
+    pathname: uniqueKey,
+  });
 
-  const options: PutCommandOptions = {
+  const blob = await put(uniqueKey, buffer, {
     access: 'public',
     contentType: mimeType,
+    token,
+  });
+
+  console.log('[storage] Upload successful. URL:', blob.url);
+
+  return {
+    url: blob.url,
+    publicId: blob.pathname,
   };
-
-  if (token) {
-    options.token = token;
-  }
-
-  try {
-    const blob = await put(uniqueKey, buffer, options);
-    console.log('[storage] Upload successful. URL:', blob.url);
-
-    return {
-      url: blob.url,
-      publicId: blob.pathname,
-    };
-  } catch (error: any) {
-    console.error('[storage] Upload failed - Error Name:', error?.name, 'Error Message:', error?.message);
-    // Preserve the original error message directly so real SDK issues are visible
-    throw new Error(`Vercel Blob Upload Failed [${error?.name || 'BlobError'}]: ${error?.message || 'Unknown Blob API error'}`);
-  }
 }
 
 /**
@@ -82,12 +79,7 @@ export async function deleteProfilePhoto(url: string | null | undefined): Promis
     if (url.includes('blob.vercel-storage.com') || url.includes('public.blob')) {
       const token = getBlobToken();
       console.log('[storage] Deleting previous profile photo:', url);
-
-      if (token) {
-        await del(url, { token });
-      } else {
-        await del(url);
-      }
+      await del(url, { token });
       console.log('[storage] Previous photo deleted successfully.');
     }
   } catch (error: any) {
