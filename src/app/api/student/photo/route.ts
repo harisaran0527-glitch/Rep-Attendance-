@@ -2,7 +2,7 @@ export const dynamic = 'force-dynamic';
 
 import { NextRequest, NextResponse } from 'next/server';
 import { getStudentSession, isStaffAuthenticated } from '@/lib/auth';
-import { uploadProfilePhoto, deleteProfilePhoto, getCloudinaryDiagnostics } from '@/lib/storage';
+import { uploadProfilePhoto, deleteProfilePhoto } from '@/lib/storage';
 import { getStudentById, updateStudentPhoto } from '@/lib/db-api';
 
 const MAX_FILE_SIZE = 2 * 1024 * 1024; // 2 MB (2,097,152 bytes)
@@ -12,14 +12,6 @@ const ALLOWED_MIME_TYPES = [
   'image/png',
   'image/webp',
 ];
-
-export async function GET() {
-  const diag = getCloudinaryDiagnostics();
-  return NextResponse.json({
-    vercelEnv: process.env.VERCEL_ENV || 'unknown',
-    ...diag,
-  });
-}
 
 export async function POST(req: NextRequest) {
   try {
