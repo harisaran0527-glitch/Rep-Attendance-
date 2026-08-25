@@ -1,16 +1,15 @@
 /**
  * Server-side only: Vercel Blob storage utilities for profile photo management.
  *
- * Explicitly passes `token` to every @vercel/blob call because the v2 SDK's
- * automatic credential resolution can fail in certain Vercel runtime
- * configurations (OIDC present without BLOB_STORE_ID, env var not resolved).
+ * Explicitly passes `token` to @vercel/blob calls when available, while gracefully
+ * allowing SDK auto-discovery as a fallback.
  */
 
 if (typeof window !== 'undefined') {
   throw new Error('Blob storage operations can only be executed on the server side.');
 }
 
-import { put, del } from '@vercel/blob';
+import { put, del, PutCommandOptions } from '@vercel/blob';
 
 export interface UploadResult {
   url: string;
@@ -18,30 +17,22 @@ export interface UploadResult {
 }
 
 /**
- * Reads BLOB_READ_WRITE_TOKEN from the environment at call time.
- * Returns the token string or throws a clear server error.
+ * Gets the BLOB_READ_WRITE_TOKEN from environment variables if available.
  */
-function requireBlobToken(): string {
-  const token = process.env['BLOB_READ_WRITE_TOKEN'];
+function getBlobToken(): string | undefined {
+  const token =
+    process.env.BLOB_READ_WRITE_TOKEN ||
+    process.env['BLOB_READ_WRITE_TOKEN'] ||
+    process.env.NEXT_PUBLIC_BLOB_READ_WRITE_TOKEN;
 
-  if (!token || token.trim() === '') {
-    console.error(
-      '[storage] BLOB_READ_WRITE_TOKEN is missing or empty.',
-      'BLOB_STORE_ID present:', !!process.env['BLOB_STORE_ID'],
-      'VERCEL_OIDC_TOKEN present:', !!process.env['VERCEL_OIDC_TOKEN'],
-      'VERCEL_ENV:', process.env['VERCEL_ENV'] ?? 'unset',
-      'NODE_ENV:', process.env['NODE_ENV'] ?? 'unset',
-    );
-    throw new Error(
-      'Profile photo upload is temporarily unavailable. Storage credentials are not configured.'
-    );
+  if (token && typeof token === 'string' && token.trim().length > 0) {
+    return token.trim();
   }
-
-  return token.trim();
+  return undefined;
 }
 
 /**
- * Uploads a profile photo to Vercel Blob storage.
+ * Uploads a profile photo to cloud storage (Vercel Blob).
  *
  * @param buffer - File content as Buffer
  * @param filename - Original or derived filename
@@ -52,25 +43,39 @@ export async function uploadProfilePhoto(
   filename: string,
   mimeType: string
 ): Promise<UploadResult> {
-  const token = requireBlobToken();
+  const token = getBlobToken();
 
   const sanitizedFilename = filename.replace(/[^a-zA-Z0-9_.-]/g, '_');
   const uniqueKey = `profile-photos/${Date.now()}_${sanitizedFilename}`;
 
-  console.log('[storage] Uploading profile photo:', uniqueKey);
+  console.log('[storage] Uploading profile photo:', uniqueKey, token ? '(using explicit token)' : '(using default SDK auth)');
 
-  const blob = await put(uniqueKey, buffer, {
+  const options: PutCommandOptions = {
     access: 'public',
     contentType: mimeType,
-    token,
-  });
-
-  console.log('[storage] Upload successful. URL:', blob.url);
-
-  return {
-    url: blob.url,
-    publicId: blob.pathname,
   };
+
+  if (token) {
+    options.token = token;
+  }
+
+  try {
+    const blob = await put(uniqueKey, buffer, options);
+    console.log('[storage] Upload successful. URL:', blob.url);
+
+    return {
+      url: blob.url,
+      publicId: blob.pathname,
+    };
+  } catch (error: any) {
+    console.error('[storage] Upload failed:', error);
+    if (!token && error?.message?.includes('credentials')) {
+      throw new Error(
+        'Storage credentials are not configured. Please set BLOB_READ_WRITE_TOKEN in environment variables.'
+      );
+    }
+    throw error;
+  }
 }
 
 /**
@@ -83,9 +88,14 @@ export async function deleteProfilePhoto(url: string | null | undefined): Promis
   try {
     // Only attempt deletion if it's a recognised Vercel Blob URL
     if (url.includes('blob.vercel-storage.com') || url.includes('public.blob')) {
-      const token = requireBlobToken();
+      const token = getBlobToken();
       console.log('[storage] Deleting previous profile photo:', url);
-      await del(url, { token });
+
+      if (token) {
+        await del(url, { token });
+      } else {
+        await del(url);
+      }
       console.log('[storage] Previous photo deleted successfully.');
     }
   } catch (error) {
