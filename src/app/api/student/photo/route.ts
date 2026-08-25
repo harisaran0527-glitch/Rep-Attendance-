@@ -37,10 +37,10 @@ export async function POST(req: NextRequest) {
     }
 
     // Server-side logging of file size and parameters
-    console.log('Server Received File Name:', file.name);
-    console.log('Server Received File Size (bytes):', file.size);
-    console.log('Server Received File Size (MB):', (file.size / (1024 * 1024)).toFixed(2));
-    console.log('Server MAX_FILE_SIZE:', MAX_FILE_SIZE);
+    console.log('[POST /api/student/photo] Received File Name:', file.name);
+    console.log('[POST /api/student/photo] Received File Size (bytes):', file.size);
+    console.log('[POST /api/student/photo] Received File Size (MB):', (file.size / (1024 * 1024)).toFixed(2));
+    console.log('[POST /api/student/photo] MAX_FILE_SIZE:', MAX_FILE_SIZE);
 
     // Server-side file validation: size and MIME type
     if (file.size > MAX_FILE_SIZE) {
@@ -94,22 +94,35 @@ export async function POST(req: NextRequest) {
     const extension = mimeType.split('/')[1] || 'jpg';
     const safeFilename = `${student.registerNumber}_${Date.now()}.${extension}`;
 
-    // 1. Upload to Cloudinary storage
+    // Step 1: Upload the NEW photo first
+    console.log('[POST /api/student/photo] Step: NEW_UPLOAD_START');
     const uploadResult = await uploadProfilePhoto(buffer, safeFilename, mimeType);
+    console.log('[POST /api/student/photo] Step: NEW_UPLOAD_SUCCESS', {
+      url: uploadResult.url,
+      publicId: uploadResult.publicId,
+    });
 
     // Capture old photo identifier before updating DB
     const oldPhotoIdentifier = student.profilePhotoPublicId || student.profilePhotoUrl;
 
-    // 2. Save new secure URL & public ID to Database
+    // Step 2: Save new secure URL & public ID to Database
     await updateStudentPhoto(
       targetStudentId,
       uploadResult.url,
       uploadResult.publicId
     );
+    console.log('[POST /api/student/photo] Step: DB_UPDATE_SUCCESS');
 
-    // 3. Clean up old image from Cloudinary after successful DB update
+    // Step 3: Attempt old image cleanup ONLY after DB update succeeds (secondary/non-blocking)
     if (oldPhotoIdentifier) {
-      await deleteProfilePhoto(oldPhotoIdentifier);
+      console.log('[POST /api/student/photo] Step: OLD_IMAGE_DELETE_START', { oldPhotoIdentifier });
+      try {
+        await deleteProfilePhoto(oldPhotoIdentifier);
+        console.log('[POST /api/student/photo] Step: OLD_IMAGE_DELETE_SUCCESS');
+      } catch (cleanupErr: any) {
+        // Non-blocking safeguard: log failure but NEVER break the profile photo update
+        console.error('[POST /api/student/photo] Step: OLD_IMAGE_DELETE_FAILED (non-blocking):', cleanupErr?.message);
+      }
     }
 
     return NextResponse.json({
@@ -118,7 +131,7 @@ export async function POST(req: NextRequest) {
       message: 'Profile photo updated successfully.',
     });
   } catch (error: any) {
-    console.error('Error in POST /api/student/photo:', error);
+    console.error('[POST /api/student/photo] Execution Error:', error);
     return NextResponse.json(
       { success: false, error: error.message || 'Internal server error.' },
       { status: 500 }
@@ -168,9 +181,13 @@ export async function DELETE(req: NextRequest) {
     // Reset database fields first
     await updateStudentPhoto(targetStudentId, null, null);
 
-    // Delete existing cloud image after DB reset
+    // Delete existing cloud image after DB reset (non-blocking)
     if (oldPhotoIdentifier) {
-      await deleteProfilePhoto(oldPhotoIdentifier);
+      try {
+        await deleteProfilePhoto(oldPhotoIdentifier);
+      } catch (cleanupErr: any) {
+        console.error('[DELETE /api/student/photo] Old image cleanup failed (non-blocking):', cleanupErr?.message);
+      }
     }
 
     return NextResponse.json({

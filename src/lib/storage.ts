@@ -185,6 +185,7 @@ export async function uploadProfilePhoto(
 
 /**
  * Deletes a profile photo from Cloudinary given its public_id or full Cloudinary secure_url.
+ * Non-blocking: will never throw an unhandled exception or break the profile update flow.
  * @param publicIdOrUrl - Cloudinary public_id or full URL to delete
  */
 export async function deleteProfilePhoto(publicIdOrUrl: string | null | undefined): Promise<void> {
@@ -194,7 +195,14 @@ export async function deleteProfilePhoto(publicIdOrUrl: string | null | undefine
     const client = getCloudinaryConfig();
 
     let publicId = publicIdOrUrl;
+
+    // Handle full URLs safely
     if (publicIdOrUrl.startsWith('http://') || publicIdOrUrl.startsWith('https://')) {
+      if (!publicIdOrUrl.includes('cloudinary.com')) {
+        console.log('[storage] Skipping deletion of non-Cloudinary URL:', publicIdOrUrl);
+        return;
+      }
+
       const uploadIdx = publicIdOrUrl.indexOf('/upload/');
       if (uploadIdx !== -1) {
         let path = publicIdOrUrl.substring(uploadIdx + 8);
@@ -206,10 +214,10 @@ export async function deleteProfilePhoto(publicIdOrUrl: string | null | undefine
     }
 
     console.log('[storage] Deleting previous profile photo from Cloudinary:', publicId);
-    await client.uploader.destroy(publicId, { resource_type: 'image' });
-    console.log('[storage] Previous photo deleted from Cloudinary successfully.');
+    const destroyRes = await client.uploader.destroy(publicId, { resource_type: 'image' });
+    console.log('[storage] Cloudinary destroy result:', destroyRes);
   } catch (error: any) {
-    // Non-blocking deletion
-    console.error('[storage] Failed to delete previous Cloudinary image:', error?.message);
+    // Non-blocking deletion safeguard
+    console.error('[storage] Failed to delete previous Cloudinary image (safely swallowed):', error?.message);
   }
 }
