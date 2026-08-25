@@ -13,6 +13,20 @@ const ALLOWED_MIME_TYPES = [
   'image/webp',
 ];
 
+export async function GET() {
+  const token = process.env.BLOB_READ_WRITE_TOKEN || process.env['BLOB_READ_WRITE_TOKEN'];
+  const storeId = process.env.BLOB_STORE_ID;
+  const oidc = process.env.VERCEL_OIDC_TOKEN;
+
+  return NextResponse.json({
+    vercelEnv: process.env.VERCEL_ENV || 'unknown',
+    hasBlobToken: typeof token === 'string' && token.trim().length > 0,
+    blobTokenLength: typeof token === 'string' ? token.trim().length : 0,
+    hasBlobStoreId: typeof storeId === 'string' && storeId.trim().length > 0,
+    hasOidcToken: typeof oidc === 'string' && oidc.trim().length > 0,
+  });
+}
+
 export async function POST(req: NextRequest) {
   try {
     const studentSession = await getStudentSession();
