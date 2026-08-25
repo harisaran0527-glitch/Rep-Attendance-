@@ -5,7 +5,7 @@
  * Supports:
  * 1. SUPABASE Storage (if SUPABASE_URL & SUPABASE_SERVICE_ROLE_KEY / SUPABASE_ANON_KEY are set)
  * 2. AWS S3 / R2 (if AWS_S3_BUCKET is set)
- * 3. LOCAL Development Fallback (saves to public/uploads/avatars during development)
+ * 3. LOCAL Development Fallback (ONLY during local development; NEVER on Vercel production)
  */
 
 import 'server-only';
@@ -36,26 +36,31 @@ function cleanValue(val?: string): string {
 }
 
 export interface StorageDiagInfo {
-  provider: 'SUPABASE' | 'S3' | 'LOCAL';
+  isProductionRuntime: boolean;
+  provider: 'SUPABASE' | 'S3' | 'LOCAL' | 'UNCONFIGURED';
   hasSupabaseUrl: boolean;
   hasSupabaseKey: boolean;
   hasAwsBucket: boolean;
 }
 
 export function getStorageDiagnostics(): StorageDiagInfo {
+  const isProductionRuntime = Boolean(process.env.VERCEL || process.env.NODE_ENV === 'production');
   const supabaseUrl = cleanValue(process.env.SUPABASE_URL);
   const supabaseKey = cleanValue(process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_ANON_KEY);
   const awsBucket = cleanValue(process.env.AWS_S3_BUCKET);
   const rawProvider = cleanValue(process.env.CLOUD_STORAGE_PROVIDER).toUpperCase();
 
-  let provider: StorageDiagInfo['provider'] = 'LOCAL';
+  let provider: StorageDiagInfo['provider'] = 'UNCONFIGURED';
   if (rawProvider === 'SUPABASE' || (supabaseUrl && supabaseKey)) {
     provider = 'SUPABASE';
   } else if (rawProvider === 'S3' || awsBucket) {
     provider = 'S3';
+  } else if (!isProductionRuntime) {
+    provider = 'LOCAL';
   }
 
   return {
+    isProductionRuntime,
     provider,
     hasSupabaseUrl: Boolean(supabaseUrl),
     hasSupabaseKey: Boolean(supabaseKey),
@@ -65,6 +70,7 @@ export function getStorageDiagnostics(): StorageDiagInfo {
 
 /**
  * Core upload engine adapted from Student360's uploadToCloudStorage.
+ * On Vercel production, NEVER attempts local filesystem access.
  */
 export async function uploadToCloudStorage(
   buffer: Buffer,
@@ -108,7 +114,7 @@ export async function uploadToCloudStorage(
     }
 
     const storageBase = `${baseUrl}/storage/v1`;
-    const bucket = cleanValue(process.env.SUPABASE_BUCKET) || 'cr-attendance-assets';
+    const bucket = cleanValue(process.env.SUPABASE_BUCKET) || 'student360-assets';
     const uploadUrl = `${storageBase}/object/${bucket}/${folder}/${safeFileName}`;
 
     console.log('[cloudStorage] Uploading asset to Supabase Storage:', uploadUrl);
@@ -150,7 +156,14 @@ export async function uploadToCloudStorage(
     };
   }
 
-  // 3. LOCAL DEVELOPMENT FALLBACK
+  // 3. PRODUCTION STRICT GUARD
+  if (diag.isProductionRuntime) {
+    throw new Error(
+      'SUPABASE_STORAGE_NOT_CONFIGURED: Missing SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY in production environment variables.'
+    );
+  }
+
+  // 4. LOCAL DEVELOPMENT FALLBACK (Only for local dev machine)
   const targetDir = path.join(process.cwd(), 'public', 'uploads', folder);
   await fs.mkdir(targetDir, { recursive: true });
   const localFilePath = path.join(targetDir, safeFileName);
@@ -197,7 +210,7 @@ export async function deleteProfilePhoto(publicIdOrUrl: string | null | undefine
       if (baseUrl.includes('/rest/v1')) baseUrl = baseUrl.split('/rest/v1')[0];
       if (baseUrl.endsWith('/')) baseUrl = baseUrl.slice(0, -1);
 
-      const bucket = cleanValue(process.env.SUPABASE_BUCKET) || 'cr-attendance-assets';
+      const bucket = cleanValue(process.env.SUPABASE_BUCKET) || 'student360-assets';
       
       let objectPath = publicIdOrUrl;
       const idx = publicIdOrUrl.indexOf(`/object/public/${bucket}/`);
@@ -218,7 +231,7 @@ export async function deleteProfilePhoto(publicIdOrUrl: string | null | undefine
       return;
     }
 
-    if (publicIdOrUrl.startsWith('/uploads/')) {
+    if (!process.env.VERCEL && publicIdOrUrl.startsWith('/uploads/')) {
       const localFilePath = path.join(process.cwd(), 'public', publicIdOrUrl);
       await fs.unlink(localFilePath).catch(() => {});
       return;
