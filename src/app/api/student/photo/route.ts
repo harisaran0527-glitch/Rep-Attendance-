@@ -2,7 +2,7 @@ export const dynamic = 'force-dynamic';
 
 import { NextRequest, NextResponse } from 'next/server';
 import { getStudentSession, isStaffAuthenticated } from '@/lib/auth';
-import { uploadProfilePhoto, deleteProfilePhoto, getCloudinaryDiagnostics } from '@/lib/storage';
+import { uploadProfilePhoto, deleteProfilePhoto, getStorageDiagnostics } from '@/lib/storage';
 import { getStudentById, updateStudentPhoto } from '@/lib/db-api';
 
 const MAX_FILE_SIZE = 2 * 1024 * 1024; // 2 MB (2,097,152 bytes)
@@ -14,7 +14,7 @@ const ALLOWED_MIME_TYPES = [
 ];
 
 export async function GET() {
-  const diag = getCloudinaryDiagnostics();
+  const diag = getStorageDiagnostics();
   return NextResponse.json(diag);
 }
 
@@ -99,7 +99,7 @@ export async function POST(req: NextRequest) {
     const extension = mimeType.split('/')[1] || 'jpg';
     const safeFilename = `${student.registerNumber}_${Date.now()}.${extension}`;
 
-    // Step 1: Upload the NEW photo first
+    // Step 1: Upload the NEW photo first using Student360 architecture
     console.log('[POST /api/student/photo] Step: NEW_UPLOAD_START');
     const uploadResult = await uploadProfilePhoto(buffer, safeFilename, mimeType);
     console.log('[POST /api/student/photo] Step: NEW_UPLOAD_SUCCESS', {

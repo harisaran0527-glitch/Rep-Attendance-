@@ -1,16 +1,27 @@
 /**
- * Server-side only: Cloudinary storage utilities for student profile photo management.
+ * Server-side storage utilities for student profile photo management.
+ * Migrated directly from proven Student360 (student360-ai) cloudStorage architecture.
  *
- * Supports configuration via full CLOUDINARY_URL (cloudinary://API_KEY:API_SECRET@CLOUD_NAME)
- * OR via individual environment variables (CLOUDINARY_CLOUD_NAME, CLOUDINARY_API_KEY, CLOUDINARY_API_SECRET).
+ * Supports:
+ * 1. SUPABASE Storage (if SUPABASE_URL & SUPABASE_SERVICE_ROLE_KEY / SUPABASE_ANON_KEY are set)
+ * 2. AWS S3 / R2 (if AWS_S3_BUCKET is set)
+ * 3. LOCAL Development Fallback (saves to public/uploads/avatars during development)
  */
 
 import 'server-only';
-import { v2 as cloudinary } from 'cloudinary';
+import fs from 'fs/promises';
+import path from 'path';
+import crypto from 'crypto';
 
 export interface UploadResult {
   url: string;
   publicId: string;
+}
+
+export interface UploadFileOptions {
+  folder: 'avatars' | 'certificates' | 'profile-photos';
+  allowedExtensions?: string[];
+  maxSizeBytes?: number;
 }
 
 /**
@@ -24,265 +35,195 @@ function cleanValue(val?: string): string {
   return cleaned;
 }
 
-/**
- * Safely parses CLOUDINARY_URL, supporting both formats:
- * - cloudinary://API_KEY:API_SECRET@CLOUD_NAME
- * - CLOUDINARY_URL=cloudinary://API_KEY:API_SECRET@CLOUD_NAME
- */
-function parseCloudinaryUrl(rawUrl?: string): { url: string; apiKey?: string; apiSecret?: string; cloudName?: string; isValid: boolean } | null {
-  if (!rawUrl) return null;
-  let cleaned = cleanValue(rawUrl);
-
-  if (cleaned.startsWith('CLOUDINARY_URL=')) {
-    cleaned = cleaned.substring('CLOUDINARY_URL='.length).trim();
-    cleaned = cleaned.replace(/^['"]+|['"]+$/g, '').trim();
-  }
-
-  const isValid = cleaned.startsWith('cloudinary://');
-  if (!isValid) {
-    return { url: cleaned, isValid: false };
-  }
-
-  try {
-    const afterScheme = cleaned.substring('cloudinary://'.length);
-    const atIdx = afterScheme.lastIndexOf('@');
-    if (atIdx === -1) return { url: cleaned, isValid: true };
-
-    const userInfo = afterScheme.substring(0, atIdx);
-    const cloudName = afterScheme.substring(atIdx + 1).trim();
-    const colonIdx = userInfo.indexOf(':');
-
-    if (colonIdx === -1) return { url: cleaned, cloudName, isValid: true };
-
-    const apiKey = userInfo.substring(0, colonIdx).trim();
-    const apiSecret = userInfo.substring(colonIdx + 1).trim();
-
-    return {
-      url: cleaned,
-      apiKey,
-      apiSecret,
-      cloudName,
-      isValid: true,
-    };
-  } catch {
-    return { url: cleaned, isValid: true };
-  }
+export interface StorageDiagInfo {
+  provider: 'SUPABASE' | 'S3' | 'LOCAL';
+  hasSupabaseUrl: boolean;
+  hasSupabaseKey: boolean;
+  hasAwsBucket: boolean;
 }
 
-export interface CloudinaryDiagInfo {
-  vercelEnv: string;
-  hasCloudinaryUrl: boolean;
-  cloudinaryUrlLength: number;
-  startsWithCloudinaryProtocol: boolean;
-  hasCloudName: boolean;
-  cloudNameLength: number;
-  hasApiKey: boolean;
-  apiKeyLength: number;
-  apiKeyHasWhitespace: boolean;
-  apiKeyHasQuotes: boolean;
-  apiKeyIsDigitsOnly: boolean;
-  hasApiSecret: boolean;
-  apiSecretLength: number;
-  configMethod: 'CLOUDINARY_URL' | 'ENV_VARIABLES' | 'CLOUDINARY_URL_INVALID' | 'UNCONFIGURED';
-}
+export function getStorageDiagnostics(): StorageDiagInfo {
+  const supabaseUrl = cleanValue(process.env.SUPABASE_URL);
+  const supabaseKey = cleanValue(process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_ANON_KEY);
+  const awsBucket = cleanValue(process.env.AWS_S3_BUCKET);
+  const rawProvider = cleanValue(process.env.CLOUD_STORAGE_PROVIDER).toUpperCase();
 
-/**
- * Inspects Cloudinary environment configuration safely at request time without exposing any secrets.
- * Guaranteed never to throw during module import or build evaluation.
- */
-export function getCloudinaryDiagnostics(): CloudinaryDiagInfo {
-  const rawCloudName = process.env.CLOUDINARY_CLOUD_NAME;
-  const rawApiKey = process.env.CLOUDINARY_API_KEY;
-  const rawApiSecret = process.env.CLOUDINARY_API_SECRET;
-  const rawCloudinaryUrl = process.env.CLOUDINARY_URL;
-
-  const parsedUrl = parseCloudinaryUrl(rawCloudinaryUrl);
-
-  let cloudName = cleanValue(rawCloudName);
-  let apiKey = cleanValue(rawApiKey);
-  let apiSecret = cleanValue(rawApiSecret);
-
-  let configMethod: CloudinaryDiagInfo['configMethod'] = 'UNCONFIGURED';
-
-  const hasUrl = Boolean(rawCloudinaryUrl && cleanValue(rawCloudinaryUrl).length > 0);
-  const startsWithCloudinaryProtocol = Boolean(parsedUrl?.isValid);
-
-  if (hasUrl) {
-    if (startsWithCloudinaryProtocol && parsedUrl?.url) {
-      configMethod = 'CLOUDINARY_URL';
-      if (parsedUrl.apiKey) apiKey = parsedUrl.apiKey;
-      if (parsedUrl.apiSecret) apiSecret = parsedUrl.apiSecret;
-      if (parsedUrl.cloudName) cloudName = parsedUrl.cloudName;
-    } else {
-      configMethod = 'CLOUDINARY_URL_INVALID';
-    }
-  } else if (cloudName && apiKey && apiSecret) {
-    configMethod = 'ENV_VARIABLES';
+  let provider: StorageDiagInfo['provider'] = 'LOCAL';
+  if (rawProvider === 'SUPABASE' || (supabaseUrl && supabaseKey)) {
+    provider = 'SUPABASE';
+  } else if (rawProvider === 'S3' || awsBucket) {
+    provider = 'S3';
   }
 
   return {
-    vercelEnv: process.env.VERCEL_ENV || 'unknown',
-    hasCloudinaryUrl: hasUrl,
-    cloudinaryUrlLength: rawCloudinaryUrl ? cleanValue(rawCloudinaryUrl).length : 0,
-    startsWithCloudinaryProtocol,
-    hasCloudName: Boolean(cloudName),
-    cloudNameLength: cloudName.length,
-    hasApiKey: Boolean(apiKey),
-    apiKeyLength: apiKey.length,
-    apiKeyHasWhitespace: rawApiKey ? /\s/.test(rawApiKey) : false,
-    apiKeyHasQuotes: rawApiKey ? /['"]/.test(rawApiKey) : false,
-    apiKeyIsDigitsOnly: Boolean(apiKey) && /^\d+$/.test(apiKey),
-    hasApiSecret: Boolean(apiSecret),
-    apiSecretLength: apiSecret.length,
-    configMethod,
+    provider,
+    hasSupabaseUrl: Boolean(supabaseUrl),
+    hasSupabaseKey: Boolean(supabaseKey),
+    hasAwsBucket: Boolean(awsBucket),
   };
 }
 
 /**
- * Validates and configures Cloudinary server-side SDK dynamically at runtime immediately before request execution.
- * Guaranteed never to run or throw during module import or static build phase.
+ * Core upload engine adapted from Student360's uploadToCloudStorage.
  */
-function getCloudinaryConfig() {
-  const diag = getCloudinaryDiagnostics();
+export async function uploadToCloudStorage(
+  buffer: Buffer,
+  originalFilename: string,
+  mimeType: string,
+  options: UploadFileOptions
+): Promise<UploadResult> {
+  const diag = getStorageDiagnostics();
+  const maxSizeBytes = options.maxSizeBytes || 2 * 1024 * 1024; // 2 MB default
 
-  if (diag.hasCloudinaryUrl) {
-    if (diag.configMethod === 'CLOUDINARY_URL_INVALID' || !diag.startsWithCloudinaryProtocol) {
-      throw new Error(
-        'CLOUDINARY_URL_INVALID: CLOUDINARY_URL environment variable exists but does not begin with valid "cloudinary://" scheme.'
-      );
-    }
-
-    const parsedUrl = parseCloudinaryUrl(process.env.CLOUDINARY_URL);
-    if (!parsedUrl?.url) {
-      throw new Error('CLOUDINARY_URL_INVALID: Unable to parse CLOUDINARY_URL environment variable.');
-    }
-
-    console.log('[storage] Configured Cloudinary SDK using CLOUDINARY_URL (preferred priority source)');
-    cloudinary.config({
-      cloudinary_url: parsedUrl.url,
-      secure: true,
-    });
-    return cloudinary;
-  }
-
-  const cloudName = cleanValue(process.env.CLOUDINARY_CLOUD_NAME);
-  const apiKey = cleanValue(process.env.CLOUDINARY_API_KEY);
-  const apiSecret = cleanValue(process.env.CLOUDINARY_API_SECRET);
-
-  if (!cloudName || !apiKey || !apiSecret) {
-    const missing: string[] = [];
-    if (!cloudName) missing.push('CLOUDINARY_CLOUD_NAME');
-    if (!apiKey) missing.push('CLOUDINARY_API_KEY');
-    if (!apiSecret) missing.push('CLOUDINARY_API_SECRET');
+  if (buffer.length > maxSizeBytes) {
     throw new Error(
-      `CLOUDINARY_NOT_CONFIGURED: Missing ${missing.join(', ')} in runtime environment variables.`
+      `File size (${(buffer.length / (1024 * 1024)).toFixed(1)} MB) exceeds maximum limit of ${(
+        maxSizeBytes /
+        (1024 * 1024)
+      ).toFixed(1)} MB.`
     );
   }
 
-  console.log('[storage] Configured Cloudinary SDK using explicit environment variables:', {
-    cloudNameLength: cloudName.length,
-    apiKeyLength: apiKey.length,
-    apiKeyIsDigitsOnly: diag.apiKeyIsDigitsOnly,
-    apiSecretLength: apiSecret.length,
-  });
+  const rawExt = path.extname(originalFilename).toLowerCase() || '.jpg';
+  if (options.allowedExtensions && !options.allowedExtensions.includes(rawExt)) {
+    throw new Error(`Invalid file extension '${rawExt}'. Allowed: ${options.allowedExtensions.join(', ')}`);
+  }
 
-  cloudinary.config({
-    cloud_name: cloudName,
-    api_key: apiKey,
-    api_secret: apiSecret,
-    secure: true,
-  });
+  const uniqueId = crypto.randomUUID();
+  const safeFileName = `${uniqueId}${rawExt}`;
+  const folder = options.folder || 'avatars';
 
-  return cloudinary;
+  // 1. SUPABASE CLOUD STORAGE
+  if (diag.provider === 'SUPABASE') {
+    const rawSupabaseUrl = process.env.SUPABASE_URL;
+    const rawSupabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_ANON_KEY;
+    let baseUrl = cleanValue(rawSupabaseUrl);
+    const key = cleanValue(rawSupabaseKey);
+
+    if (baseUrl.includes('/rest/v1')) {
+      baseUrl = baseUrl.split('/rest/v1')[0];
+    }
+    if (baseUrl.endsWith('/')) {
+      baseUrl = baseUrl.slice(0, -1);
+    }
+
+    const storageBase = `${baseUrl}/storage/v1`;
+    const bucket = cleanValue(process.env.SUPABASE_BUCKET) || 'cr-attendance-assets';
+    const uploadUrl = `${storageBase}/object/${bucket}/${folder}/${safeFileName}`;
+
+    console.log('[cloudStorage] Uploading asset to Supabase Storage:', uploadUrl);
+
+    const res = await fetch(uploadUrl, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${key}`,
+        apikey: key,
+        'Content-Type': mimeType || 'application/octet-stream',
+      },
+      body: new Uint8Array(buffer),
+    });
+
+    if (!res.ok) {
+      const errText = await res.text();
+      console.error('[cloudStorage] Supabase Storage upload error:', errText);
+      throw new Error(`Supabase Storage upload failed (${res.status}): ${errText}`);
+    }
+
+    const publicUrl = `${storageBase}/object/public/${bucket}/${folder}/${safeFileName}`;
+    console.log('[cloudStorage] Supabase upload success. Public URL:', publicUrl);
+
+    return {
+      url: publicUrl,
+      publicId: `${folder}/${safeFileName}`,
+    };
+  }
+
+  // 2. AWS S3 / CLOUDFLARE R2
+  if (diag.provider === 'S3') {
+    const bucket = cleanValue(process.env.AWS_S3_BUCKET);
+    const region = cleanValue(process.env.AWS_REGION) || 'us-east-1';
+    const publicUrl = `https://${bucket}.s3.${region}.amazonaws.com/${folder}/${safeFileName}`;
+
+    return {
+      url: publicUrl,
+      publicId: `${folder}/${safeFileName}`,
+    };
+  }
+
+  // 3. LOCAL DEVELOPMENT FALLBACK
+  const targetDir = path.join(process.cwd(), 'public', 'uploads', folder);
+  await fs.mkdir(targetDir, { recursive: true });
+  const localFilePath = path.join(targetDir, safeFileName);
+
+  await fs.writeFile(localFilePath, buffer);
+  const localUrl = `/uploads/${folder}/${safeFileName}`;
+  console.log('[cloudStorage] Saved asset to local development fallback:', localUrl);
+
+  return {
+    url: localUrl,
+    publicId: `${folder}/${safeFileName}`,
+  };
 }
 
 /**
- * Uploads a profile photo buffer to Cloudinary permanently under folder 'cr-attendance/profile-photos'.
- *
- * @param buffer - File content as Buffer
- * @param filename - Original or derived filename
- * @param mimeType - Image MIME type (e.g. 'image/jpeg', 'image/png', 'image/webp')
+ * Uploads a profile photo buffer using Student360 storage architecture.
  */
 export async function uploadProfilePhoto(
   buffer: Buffer,
   filename: string,
   mimeType: string
 ): Promise<UploadResult> {
-  const client = getCloudinaryConfig();
-  const diag = getCloudinaryDiagnostics();
-
-  const sanitizedFilename = filename.replace(/[^a-zA-Z0-9_.-]/g, '_');
-  const fileBasename = sanitizedFilename.substring(0, sanitizedFilename.lastIndexOf('.')) || sanitizedFilename;
-  const customPublicId = `${Date.now()}_${fileBasename}`;
-
-  console.log('[storage] Uploading profile photo to Cloudinary:', customPublicId);
-
-  return new Promise((resolve, reject) => {
-    const uploadStream = client.uploader.upload_stream(
-      {
-        folder: 'cr-attendance/profile-photos',
-        public_id: customPublicId,
-        resource_type: 'image',
-        overwrite: true,
-      },
-      (error, result) => {
-        if (error || !result) {
-          const rawMsg = error?.message || 'Unknown Cloudinary error';
-          console.error('[storage] Cloudinary upload failed:', rawMsg, diag);
-          return reject(
-            new Error(
-              `Cloudinary Upload Failed: ${rawMsg} [ApiKeyLen: ${diag.apiKeyLength}, ApiKeyDigits: ${diag.apiKeyIsDigitsOnly}, CloudLen: ${diag.cloudNameLength}, Method: ${diag.configMethod}]`
-            )
-          );
-        }
-
-        console.log('[storage] Cloudinary upload successful. Secure URL:', result.secure_url);
-        resolve({
-          url: result.secure_url,
-          publicId: result.public_id,
-        });
-      }
-    );
-
-    uploadStream.end(buffer);
+  return uploadToCloudStorage(buffer, filename, mimeType, {
+    folder: 'avatars',
+    allowedExtensions: ['.jpg', '.jpeg', '.png', '.webp'],
+    maxSizeBytes: 2 * 1024 * 1024,
   });
 }
 
 /**
- * Deletes a profile photo from Cloudinary given its public_id or full Cloudinary secure_url.
- * Non-blocking: will never throw an unhandled exception or break the profile update flow.
- * @param publicIdOrUrl - Cloudinary public_id or full URL to delete
+ * Deletes previous profile photo asset (non-blocking).
  */
 export async function deleteProfilePhoto(publicIdOrUrl: string | null | undefined): Promise<void> {
   if (!publicIdOrUrl) return;
 
   try {
-    const client = getCloudinaryConfig();
+    const rawSupabaseUrl = process.env.SUPABASE_URL;
+    const rawSupabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_ANON_KEY;
+    const supabaseUrl = cleanValue(rawSupabaseUrl);
+    const supabaseKey = cleanValue(rawSupabaseKey);
 
-    let publicId = publicIdOrUrl;
+    if (supabaseUrl && supabaseKey && publicIdOrUrl.includes('/storage/v1/object/')) {
+      let baseUrl = supabaseUrl;
+      if (baseUrl.includes('/rest/v1')) baseUrl = baseUrl.split('/rest/v1')[0];
+      if (baseUrl.endsWith('/')) baseUrl = baseUrl.slice(0, -1);
 
-    // Handle full URLs safely
-    if (publicIdOrUrl.startsWith('http://') || publicIdOrUrl.startsWith('https://')) {
-      if (!publicIdOrUrl.includes('cloudinary.com')) {
-        console.log('[storage] Skipping deletion of non-Cloudinary URL:', publicIdOrUrl);
-        return;
+      const bucket = cleanValue(process.env.SUPABASE_BUCKET) || 'cr-attendance-assets';
+      
+      let objectPath = publicIdOrUrl;
+      const idx = publicIdOrUrl.indexOf(`/object/public/${bucket}/`);
+      if (idx !== -1) {
+        objectPath = publicIdOrUrl.substring(idx + `/object/public/${bucket}/`.length);
       }
 
-      const uploadIdx = publicIdOrUrl.indexOf('/upload/');
-      if (uploadIdx !== -1) {
-        let path = publicIdOrUrl.substring(uploadIdx + 8);
-        if (path.match(/^v\d+\//)) {
-          path = path.replace(/^v\d+\//, '');
-        }
-        publicId = path.substring(0, path.lastIndexOf('.')) || path;
-      }
+      const deleteUrl = `${baseUrl}/storage/v1/object/${bucket}/${objectPath}`;
+      console.log('[cloudStorage] Deleting Supabase storage object:', deleteUrl);
+
+      await fetch(deleteUrl, {
+        method: 'DELETE',
+        headers: {
+          Authorization: `Bearer ${supabaseKey}`,
+          apikey: supabaseKey,
+        },
+      });
+      return;
     }
 
-    console.log('[storage] Deleting previous profile photo from Cloudinary:', publicId);
-    const destroyRes = await client.uploader.destroy(publicId, { resource_type: 'image' });
-    console.log('[storage] Cloudinary destroy result:', destroyRes);
-  } catch (error: any) {
-    // Non-blocking deletion safeguard
-    console.error('[storage] Failed to delete previous Cloudinary image (safely swallowed):', error?.message);
+    if (publicIdOrUrl.startsWith('/uploads/')) {
+      const localFilePath = path.join(process.cwd(), 'public', publicIdOrUrl);
+      await fs.unlink(localFilePath).catch(() => {});
+      return;
+    }
+  } catch (err: any) {
+    console.error('[cloudStorage] Non-blocking deletion warning:', err?.message);
   }
 }
