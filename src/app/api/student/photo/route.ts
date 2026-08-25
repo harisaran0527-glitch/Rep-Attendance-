@@ -1,6 +1,7 @@
 export const dynamic = 'force-dynamic';
 
 import { NextRequest, NextResponse } from 'next/server';
+import { revalidatePath } from 'next/cache';
 import { getStudentSession, isStaffAuthenticated } from '@/lib/auth';
 import { uploadProfilePhoto, deleteProfilePhoto, getStorageDiagnostics } from '@/lib/storage';
 import { getStudentById, updateStudentPhoto } from '@/lib/db-api';
@@ -118,6 +119,16 @@ export async function POST(req: NextRequest) {
     );
     console.log('[POST /api/student/photo] Step: DB_UPDATE_SUCCESS');
 
+    // Trigger Next.js route revalidation for instant Admin Panel & Portal updates
+    try {
+      revalidatePath('/students');
+      revalidatePath('/attendance');
+      revalidatePath('/history');
+      revalidatePath('/student/dashboard');
+    } catch {
+      // Non-blocking revalidation
+    }
+
     // Step 3: Attempt old image cleanup ONLY after DB update succeeds (secondary/non-blocking)
     if (oldPhotoIdentifier) {
       console.log('[POST /api/student/photo] Step: OLD_IMAGE_DELETE_START', { oldPhotoIdentifier });
@@ -185,6 +196,15 @@ export async function DELETE(req: NextRequest) {
 
     // Reset database fields first
     await updateStudentPhoto(targetStudentId, null, null);
+
+    try {
+      revalidatePath('/students');
+      revalidatePath('/attendance');
+      revalidatePath('/history');
+      revalidatePath('/student/dashboard');
+    } catch {
+      // Non-blocking
+    }
 
     // Delete existing cloud image after DB reset (non-blocking)
     if (oldPhotoIdentifier) {

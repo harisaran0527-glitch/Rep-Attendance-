@@ -67,6 +67,13 @@ export default function StudentAvatar({
   const gradientClass = getGradient(name);
 
   if (src && !imageError) {
+    const isUnoptimized =
+      src.startsWith('data:') ||
+      src.startsWith('blob:') ||
+      src.includes('public.blob') ||
+      src.includes('vercel-storage.com') ||
+      src.includes('supabase.co');
+
     return (
       <div
         className={`relative inline-block rounded-full overflow-hidden shrink-0 border border-slate-700/50 shadow-sm ${container} ${className}`}
@@ -78,7 +85,7 @@ export default function StudentAvatar({
           height={px}
           className="object-cover w-full h-full rounded-full"
           onError={() => setImageError(true)}
-          unoptimized={src.startsWith('data:') || src.startsWith('blob:') || src.includes('public.blob') || src.includes('vercel-storage.com')}
+          unoptimized={isUnoptimized}
         />
       </div>
     );
