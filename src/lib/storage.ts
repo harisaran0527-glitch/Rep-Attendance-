@@ -44,7 +44,7 @@ export async function uploadProfilePhoto(
   const sanitizedFilename = filename.replace(/[^a-zA-Z0-9_.-]/g, '_');
   const uniqueKey = `profile-photos/${Date.now()}_${sanitizedFilename}`;
 
-  console.log('[storage] Uploading profile photo:', uniqueKey, token ? '(using explicit token)' : '(using default SDK auth)');
+  console.log('[storage] Uploading profile photo:', uniqueKey, token ? '(has explicit token)' : '(no explicit token)');
 
   const options: PutCommandOptions = {
     access: 'public',
@@ -64,13 +64,9 @@ export async function uploadProfilePhoto(
       publicId: blob.pathname,
     };
   } catch (error: any) {
-    console.error('[storage] Upload failed:', error?.message || 'Storage error');
-    if (!token && error?.message?.includes('credentials')) {
-      throw new Error(
-        'Storage credentials are not configured. Please set BLOB_READ_WRITE_TOKEN in environment variables.'
-      );
-    }
-    throw error;
+    console.error('[storage] Upload failed - Error Name:', error?.name, 'Error Message:', error?.message);
+    // Preserve the original error message directly so real SDK issues are visible
+    throw new Error(`Vercel Blob Upload Failed [${error?.name || 'BlobError'}]: ${error?.message || 'Unknown Blob API error'}`);
   }
 }
 
@@ -96,6 +92,6 @@ export async function deleteProfilePhoto(url: string | null | undefined): Promis
     }
   } catch (error: any) {
     // Non-blocking: log but do not fail the profile update
-    console.error('[storage] Failed to delete previous cloud image:', error?.message || 'Deletion error');
+    console.error('[storage] Failed to delete previous cloud image:', error?.name, error?.message);
   }
 }
