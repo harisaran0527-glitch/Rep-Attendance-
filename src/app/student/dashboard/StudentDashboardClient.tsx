@@ -230,8 +230,17 @@ export default function StudentDashboardClient({
       <header className="sticky top-0 z-30 bg-slate-900/80 light:bg-white/80 backdrop-blur-md border-b border-slate-800/80 light:border-slate-200">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-indigo-600/20 text-indigo-400 border border-indigo-500/30 flex items-center justify-center shadow-md">
-              <GraduationCap className="w-6 h-6" />
+            <div
+              className="relative group cursor-pointer shrink-0"
+              onClick={() => setIsPhotoModalOpen(true)}
+              title="Click to manage profile photo"
+            >
+              <StudentAvatar
+                src={photoUrl}
+                name={student.studentName}
+                size="sm"
+                className="ring-2 ring-indigo-500/40 shadow-sm hover:scale-105 transition-transform"
+              />
             </div>
             <div>
               <h1 className="text-base font-bold tracking-tight text-slate-100 light:text-slate-900 flex items-center gap-2">
@@ -493,7 +502,10 @@ export default function StudentDashboardClient({
         onClose={() => setIsPhotoModalOpen(false)}
         studentName={student.studentName}
         currentPhotoUrl={photoUrl}
-        onPhotoUpdated={(newUrl) => setPhotoUrl(newUrl)}
+        onPhotoUpdated={(newUrl) => {
+          setPhotoUrl(newUrl);
+          router.refresh();
+        }}
       />
     </div>
   );

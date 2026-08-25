@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import Image from 'next/image';
 
 interface StudentAvatarProps {
@@ -17,6 +17,10 @@ export default function StudentAvatar({
   className = '',
 }: StudentAvatarProps) {
   const [imageError, setImageError] = useState(false);
+
+  useEffect(() => {
+    setImageError(false);
+  }, [src]);
 
   // Compute initials (e.g., "John Doe" -> "JD", "Alex" -> "A")
   const getInitials = (fullName: string) => {
