@@ -13,17 +13,6 @@ const ALLOWED_MIME_TYPES = [
   'image/webp',
 ];
 
-export async function GET() {
-  const token = process.env.BLOB_READ_WRITE_TOKEN || process.env['BLOB_READ_WRITE_TOKEN'];
-
-  return NextResponse.json({
-    deploymentId: process.env.VERCEL_DEPLOYMENT_ID || 'unknown',
-    vercelEnv: process.env.VERCEL_ENV || 'unknown',
-    hasBlobToken: typeof token === 'string' && token.trim().length > 0,
-    blobTokenLength: typeof token === 'string' ? token.trim().length : 0,
-  });
-}
-
 export async function POST(req: NextRequest) {
   try {
     const studentSession = await getStudentSession();
