@@ -15,10 +15,7 @@ const ALLOWED_MIME_TYPES = [
 
 export async function GET() {
   const diag = getCloudinaryDiagnostics();
-  return NextResponse.json({
-    vercelEnv: process.env.VERCEL_ENV || 'unknown',
-    ...diag,
-  });
+  return NextResponse.json(diag);
 }
 
 export async function POST(req: NextRequest) {

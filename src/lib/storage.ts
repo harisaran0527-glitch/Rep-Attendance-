@@ -1,12 +1,8 @@
 /**
  * Server-side only: Cloudinary storage utilities for student profile photo management.
  *
- * Supports configuration via individual environment variables:
- * - CLOUDINARY_CLOUD_NAME
- * - CLOUDINARY_API_KEY
- * - CLOUDINARY_API_SECRET
- *
- * OR via full CLOUDINARY_URL (cloudinary://API_KEY:API_SECRET@CLOUD_NAME).
+ * Supports configuration via full CLOUDINARY_URL (cloudinary://API_KEY:API_SECRET@CLOUD_NAME)
+ * OR via individual environment variables (CLOUDINARY_CLOUD_NAME, CLOUDINARY_API_KEY, CLOUDINARY_API_SECRET).
  */
 
 import 'server-only';
@@ -33,7 +29,7 @@ function cleanValue(val?: string): string {
  * - cloudinary://API_KEY:API_SECRET@CLOUD_NAME
  * - CLOUDINARY_URL=cloudinary://API_KEY:API_SECRET@CLOUD_NAME
  */
-function parseCloudinaryUrl(rawUrl?: string): { url: string; apiKey?: string; apiSecret?: string; cloudName?: string } | null {
+function parseCloudinaryUrl(rawUrl?: string): { url: string; apiKey?: string; apiSecret?: string; cloudName?: string; isValid: boolean } | null {
   if (!rawUrl) return null;
   let cleaned = cleanValue(rawUrl);
 
@@ -42,20 +38,21 @@ function parseCloudinaryUrl(rawUrl?: string): { url: string; apiKey?: string; ap
     cleaned = cleaned.replace(/^['"]+|['"]+$/g, '').trim();
   }
 
-  if (!cleaned.startsWith('cloudinary://')) {
-    return null;
+  const isValid = cleaned.startsWith('cloudinary://');
+  if (!isValid) {
+    return { url: cleaned, isValid: false };
   }
 
   try {
     const afterScheme = cleaned.substring('cloudinary://'.length);
     const atIdx = afterScheme.lastIndexOf('@');
-    if (atIdx === -1) return { url: cleaned };
+    if (atIdx === -1) return { url: cleaned, isValid: true };
 
     const userInfo = afterScheme.substring(0, atIdx);
     const cloudName = afterScheme.substring(atIdx + 1).trim();
     const colonIdx = userInfo.indexOf(':');
 
-    if (colonIdx === -1) return { url: cleaned, cloudName };
+    if (colonIdx === -1) return { url: cleaned, cloudName, isValid: true };
 
     const apiKey = userInfo.substring(0, colonIdx).trim();
     const apiSecret = userInfo.substring(colonIdx + 1).trim();
@@ -65,13 +62,18 @@ function parseCloudinaryUrl(rawUrl?: string): { url: string; apiKey?: string; ap
       apiKey,
       apiSecret,
       cloudName,
+      isValid: true,
     };
   } catch {
-    return { url: cleaned };
+    return { url: cleaned, isValid: true };
   }
 }
 
 export interface CloudinaryDiagInfo {
+  vercelEnv: string;
+  hasCloudinaryUrl: boolean;
+  cloudinaryUrlLength: number;
+  startsWithCloudinaryProtocol: boolean;
   hasCloudName: boolean;
   cloudNameLength: number;
   hasApiKey: boolean;
@@ -81,9 +83,7 @@ export interface CloudinaryDiagInfo {
   apiKeyIsDigitsOnly: boolean;
   hasApiSecret: boolean;
   apiSecretLength: number;
-  hasCloudinaryUrl: boolean;
-  cloudinaryUrlLength: number;
-  configMethod: 'ENV_VARIABLES' | 'CLOUDINARY_URL' | 'UNCONFIGURED';
+  configMethod: 'CLOUDINARY_URL' | 'ENV_VARIABLES' | 'CLOUDINARY_URL_INVALID' | 'UNCONFIGURED';
 }
 
 /**
@@ -104,16 +104,27 @@ export function getCloudinaryDiagnostics(): CloudinaryDiagInfo {
 
   let configMethod: CloudinaryDiagInfo['configMethod'] = 'UNCONFIGURED';
 
-  if (parsedUrl?.url) {
-    configMethod = 'CLOUDINARY_URL';
-    if (parsedUrl.apiKey) apiKey = parsedUrl.apiKey;
-    if (parsedUrl.apiSecret) apiSecret = parsedUrl.apiSecret;
-    if (parsedUrl.cloudName) cloudName = parsedUrl.cloudName;
+  const hasUrl = Boolean(rawCloudinaryUrl && cleanValue(rawCloudinaryUrl).length > 0);
+  const startsWithCloudinaryProtocol = Boolean(parsedUrl?.isValid);
+
+  if (hasUrl) {
+    if (startsWithCloudinaryProtocol && parsedUrl?.url) {
+      configMethod = 'CLOUDINARY_URL';
+      if (parsedUrl.apiKey) apiKey = parsedUrl.apiKey;
+      if (parsedUrl.apiSecret) apiSecret = parsedUrl.apiSecret;
+      if (parsedUrl.cloudName) cloudName = parsedUrl.cloudName;
+    } else {
+      configMethod = 'CLOUDINARY_URL_INVALID';
+    }
   } else if (cloudName && apiKey && apiSecret) {
     configMethod = 'ENV_VARIABLES';
   }
 
   return {
+    vercelEnv: process.env.VERCEL_ENV || 'unknown',
+    hasCloudinaryUrl: hasUrl,
+    cloudinaryUrlLength: rawCloudinaryUrl ? cleanValue(rawCloudinaryUrl).length : 0,
+    startsWithCloudinaryProtocol,
     hasCloudName: Boolean(cloudName),
     cloudNameLength: cloudName.length,
     hasApiKey: Boolean(apiKey),
@@ -123,8 +134,6 @@ export function getCloudinaryDiagnostics(): CloudinaryDiagInfo {
     apiKeyIsDigitsOnly: Boolean(apiKey) && /^\d+$/.test(apiKey),
     hasApiSecret: Boolean(apiSecret),
     apiSecretLength: apiSecret.length,
-    hasCloudinaryUrl: Boolean(parsedUrl?.url),
-    cloudinaryUrlLength: parsedUrl?.url ? parsedUrl.url.length : 0,
     configMethod,
   };
 }
@@ -135,11 +144,20 @@ export function getCloudinaryDiagnostics(): CloudinaryDiagInfo {
  */
 function getCloudinaryConfig() {
   const diag = getCloudinaryDiagnostics();
-  const rawCloudinaryUrl = process.env.CLOUDINARY_URL;
-  const parsedUrl = parseCloudinaryUrl(rawCloudinaryUrl);
 
-  if (diag.configMethod === 'CLOUDINARY_URL' && parsedUrl?.url) {
-    console.log('[storage] Configured Cloudinary SDK using CLOUDINARY_URL (priority source)');
+  if (diag.hasCloudinaryUrl) {
+    if (diag.configMethod === 'CLOUDINARY_URL_INVALID' || !diag.startsWithCloudinaryProtocol) {
+      throw new Error(
+        'CLOUDINARY_URL_INVALID: CLOUDINARY_URL environment variable exists but does not begin with valid "cloudinary://" scheme.'
+      );
+    }
+
+    const parsedUrl = parseCloudinaryUrl(process.env.CLOUDINARY_URL);
+    if (!parsedUrl?.url) {
+      throw new Error('CLOUDINARY_URL_INVALID: Unable to parse CLOUDINARY_URL environment variable.');
+    }
+
+    console.log('[storage] Configured Cloudinary SDK using CLOUDINARY_URL (preferred priority source)');
     cloudinary.config({
       cloudinary_url: parsedUrl.url,
       secure: true,
