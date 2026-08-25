@@ -13,6 +13,22 @@ const ALLOWED_MIME_TYPES = [
   'image/webp',
 ];
 
+export async function GET() {
+  const cloudName = process.env.CLOUDINARY_CLOUD_NAME?.trim();
+  const apiKey = process.env.CLOUDINARY_API_KEY?.trim();
+  const apiSecret = process.env.CLOUDINARY_API_SECRET?.trim();
+
+  return NextResponse.json({
+    vercelEnv: process.env.VERCEL_ENV || 'unknown',
+    hasCloudName: typeof cloudName === 'string' && cloudName.length > 0,
+    hasApiKey: typeof apiKey === 'string' && apiKey.length > 0,
+    hasApiSecret: typeof apiSecret === 'string' && apiSecret.length > 0,
+    cloudNameLength: typeof cloudName === 'string' ? cloudName.length : 0,
+    apiKeyLength: typeof apiKey === 'string' ? apiKey.length : 0,
+    apiSecretLength: typeof apiSecret === 'string' ? apiSecret.length : 0,
+  });
+}
+
 export async function POST(req: NextRequest) {
   try {
     const studentSession = await getStudentSession();
