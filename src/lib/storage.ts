@@ -1,10 +1,12 @@
 /**
  * Server-side only: Cloudinary storage utilities for student profile photo management.
  *
- * Uses secure server-side environment variables:
+ * Supports configuration via individual environment variables:
  * - CLOUDINARY_CLOUD_NAME
  * - CLOUDINARY_API_KEY
  * - CLOUDINARY_API_SECRET
+ *
+ * OR via full CLOUDINARY_URL (cloudinary://API_KEY:API_SECRET@CLOUD_NAME).
  */
 
 import 'server-only';
@@ -16,12 +18,91 @@ export interface UploadResult {
 }
 
 /**
+ * Strips wrapping quotes, newlines, carriage returns, tabs, and outer whitespace.
+ */
+function cleanValue(val?: string): string {
+  if (!val) return '';
+  let cleaned = val.trim();
+  cleaned = cleaned.replace(/^['"]+|['"]+$/g, '').trim();
+  cleaned = cleaned.replace(/[\r\n\t]/g, '').trim();
+  return cleaned;
+}
+
+export interface CloudinaryDiagInfo {
+  hasCloudName: boolean;
+  cloudNameLength: number;
+  hasApiKey: boolean;
+  apiKeyLength: number;
+  apiKeyHasWhitespace: boolean;
+  apiKeyHasQuotes: boolean;
+  apiKeyIsDigitsOnly: boolean;
+  hasApiSecret: boolean;
+  apiSecretLength: number;
+  hasCloudinaryUrl: boolean;
+  cloudinaryUrlLength: number;
+  configMethod: 'ENV_VARIABLES' | 'CLOUDINARY_URL' | 'UNCONFIGURED';
+}
+
+/**
+ * Inspects Cloudinary environment configuration safely without exposing any secrets.
+ */
+export function getCloudinaryDiagnostics(): CloudinaryDiagInfo {
+  const rawCloudName = process.env.CLOUDINARY_CLOUD_NAME;
+  const rawApiKey = process.env.CLOUDINARY_API_KEY;
+  const rawApiSecret = process.env.CLOUDINARY_API_SECRET;
+  const rawCloudinaryUrl = process.env.CLOUDINARY_URL;
+
+  const cloudName = cleanValue(rawCloudName);
+  const apiKey = cleanValue(rawApiKey);
+  const apiSecret = cleanValue(rawApiSecret);
+  const cloudinaryUrl = cleanValue(rawCloudinaryUrl);
+
+  const hasVars = Boolean(cloudName && apiKey && apiSecret);
+  const hasUrl = Boolean(cloudinaryUrl && cloudinaryUrl.startsWith('cloudinary://'));
+
+  let configMethod: CloudinaryDiagInfo['configMethod'] = 'UNCONFIGURED';
+  if (hasUrl) {
+    configMethod = 'CLOUDINARY_URL';
+  } else if (hasVars) {
+    configMethod = 'ENV_VARIABLES';
+  }
+
+  return {
+    hasCloudName: Boolean(cloudName),
+    cloudNameLength: cloudName.length,
+    hasApiKey: Boolean(apiKey),
+    apiKeyLength: apiKey.length,
+    apiKeyHasWhitespace: rawApiKey ? /\s/.test(rawApiKey) : false,
+    apiKeyHasQuotes: rawApiKey ? /['"]/.test(rawApiKey) : false,
+    apiKeyIsDigitsOnly: apiKey ? /^\d+$/.test(apiKey) : false,
+    hasApiSecret: Boolean(apiSecret),
+    apiSecretLength: apiSecret.length,
+    hasCloudinaryUrl: Boolean(cloudinaryUrl),
+    cloudinaryUrlLength: cloudinaryUrl.length,
+    configMethod,
+  };
+}
+
+/**
  * Validates and configures Cloudinary server-side SDK dynamically at runtime.
  */
 function getCloudinaryConfig() {
-  const cloudName = process.env.CLOUDINARY_CLOUD_NAME?.trim();
-  const apiKey = process.env.CLOUDINARY_API_KEY?.trim();
-  const apiSecret = process.env.CLOUDINARY_API_SECRET?.trim();
+  const diag = getCloudinaryDiagnostics();
+  const rawCloudinaryUrl = process.env.CLOUDINARY_URL;
+  const cloudinaryUrl = cleanValue(rawCloudinaryUrl);
+
+  if (diag.configMethod === 'CLOUDINARY_URL') {
+    console.log('[storage] Configured Cloudinary SDK using CLOUDINARY_URL');
+    cloudinary.config({
+      cloudinary_url: cloudinaryUrl,
+      secure: true,
+    });
+    return cloudinary;
+  }
+
+  const cloudName = cleanValue(process.env.CLOUDINARY_CLOUD_NAME);
+  const apiKey = cleanValue(process.env.CLOUDINARY_API_KEY);
+  const apiSecret = cleanValue(process.env.CLOUDINARY_API_SECRET);
 
   if (!cloudName || !apiKey || !apiSecret) {
     const missing: string[] = [];
@@ -32,6 +113,13 @@ function getCloudinaryConfig() {
       `CLOUDINARY_NOT_CONFIGURED: Missing ${missing.join(', ')} in runtime environment variables.`
     );
   }
+
+  console.log('[storage] Configured Cloudinary SDK using explicit environment variables:', {
+    cloudNameLength: cloudName.length,
+    apiKeyLength: apiKey.length,
+    apiKeyIsDigitsOnly: diag.apiKeyIsDigitsOnly,
+    apiSecretLength: apiSecret.length,
+  });
 
   cloudinary.config({
     cloud_name: cloudName,
@@ -56,6 +144,7 @@ export async function uploadProfilePhoto(
   mimeType: string
 ): Promise<UploadResult> {
   const client = getCloudinaryConfig();
+  const diag = getCloudinaryDiagnostics();
 
   const sanitizedFilename = filename.replace(/[^a-zA-Z0-9_.-]/g, '_');
   const fileBasename = sanitizedFilename.substring(0, sanitizedFilename.lastIndexOf('.')) || sanitizedFilename;
@@ -73,9 +162,12 @@ export async function uploadProfilePhoto(
       },
       (error, result) => {
         if (error || !result) {
-          console.error('[storage] Cloudinary upload failed:', error?.message || error);
+          const rawMsg = error?.message || 'Unknown Cloudinary error';
+          console.error('[storage] Cloudinary upload failed:', rawMsg, diag);
           return reject(
-            new Error(`Cloudinary Upload Failed: ${error?.message || 'Unknown Cloudinary error'}`)
+            new Error(
+              `Cloudinary Upload Failed: ${rawMsg} [ApiKeyLen: ${diag.apiKeyLength}, ApiKeyDigits: ${diag.apiKeyIsDigitsOnly}, CloudLen: ${diag.cloudNameLength}, Method: ${diag.configMethod}]`
+            )
           );
         }
 
