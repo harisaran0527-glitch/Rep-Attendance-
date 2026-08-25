@@ -1,36 +1,49 @@
 /**
- * Server-side only: Vercel Blob storage utilities for profile photo management.
+ * Server-side only: Cloudinary storage utilities for student profile photo management.
  *
- * Uses secure server-side process.env.BLOB_READ_WRITE_TOKEN for authentication.
+ * Uses secure server-side environment variables:
+ * - CLOUDINARY_CLOUD_NAME
+ * - CLOUDINARY_API_KEY
+ * - CLOUDINARY_API_SECRET
  */
 
 if (typeof window !== 'undefined') {
-  throw new Error('Blob storage operations can only be executed on the server side.');
+  throw new Error('Cloudinary storage operations can only be executed on the server side.');
 }
 
-import { put, del } from '@vercel/blob';
+import { v2 as cloudinary } from 'cloudinary';
 
 export interface UploadResult {
   url: string;
-  publicId?: string;
+  publicId: string;
 }
 
 /**
- * Gets the secure server-side BLOB_READ_WRITE_TOKEN from environment variables.
- * Throws BLOB_STORAGE_NOT_CONFIGURED if token is missing or empty.
+ * Validates and configures Cloudinary server-side SDK.
  */
-function getBlobToken(): string {
-  const token = process.env.BLOB_READ_WRITE_TOKEN?.trim() || process.env['BLOB_READ_WRITE_TOKEN']?.trim();
+function getCloudinaryConfig() {
+  const cloudName = process.env.CLOUDINARY_CLOUD_NAME?.trim();
+  const apiKey = process.env.CLOUDINARY_API_KEY?.trim();
+  const apiSecret = process.env.CLOUDINARY_API_SECRET?.trim();
 
-  if (!token || token.length === 0) {
-    throw new Error('BLOB_STORAGE_NOT_CONFIGURED: BLOB_READ_WRITE_TOKEN is missing or empty in environment.');
+  if (!cloudName || !apiKey || !apiSecret) {
+    throw new Error(
+      'CLOUDINARY_NOT_CONFIGURED: Missing CLOUDINARY_CLOUD_NAME, CLOUDINARY_API_KEY, or CLOUDINARY_API_SECRET in environment variables.'
+    );
   }
 
-  return token;
+  cloudinary.config({
+    cloud_name: cloudName,
+    api_key: apiKey,
+    api_secret: apiSecret,
+    secure: true,
+  });
+
+  return cloudinary;
 }
 
 /**
- * Uploads a profile photo to cloud storage (Vercel Blob).
+ * Uploads a profile photo buffer to Cloudinary permanently under folder 'cr-attendance/profile-photos'.
  *
  * @param buffer - File content as Buffer
  * @param filename - Original or derived filename
@@ -41,49 +54,69 @@ export async function uploadProfilePhoto(
   filename: string,
   mimeType: string
 ): Promise<UploadResult> {
-  const token = getBlobToken();
+  const client = getCloudinaryConfig();
 
   const sanitizedFilename = filename.replace(/[^a-zA-Z0-9_.-]/g, '_');
-  const uniqueKey = `profile-photos/${Date.now()}_${sanitizedFilename}`;
+  const fileBasename = sanitizedFilename.substring(0, sanitizedFilename.lastIndexOf('.')) || sanitizedFilename;
+  const customPublicId = `${Date.now()}_${fileBasename}`;
 
-  // Safe diagnostics (never logging token value)
-  console.log('[storage] Uploading profile photo with explicit token:', {
-    hasToken: Boolean(token),
-    tokenLength: token.length,
-    pathname: uniqueKey,
+  console.log('[storage] Uploading profile photo to Cloudinary:', customPublicId);
+
+  return new Promise((resolve, reject) => {
+    const uploadStream = client.uploader.upload_stream(
+      {
+        folder: 'cr-attendance/profile-photos',
+        public_id: customPublicId,
+        resource_type: 'image',
+        overwrite: true,
+      },
+      (error, result) => {
+        if (error || !result) {
+          console.error('[storage] Cloudinary upload failed:', error?.message || error);
+          return reject(
+            new Error(`Cloudinary Upload Failed: ${error?.message || 'Unknown Cloudinary error'}`)
+          );
+        }
+
+        console.log('[storage] Cloudinary upload successful. Secure URL:', result.secure_url);
+        resolve({
+          url: result.secure_url,
+          publicId: result.public_id,
+        });
+      }
+    );
+
+    uploadStream.end(buffer);
   });
-
-  const blob = await put(uniqueKey, buffer, {
-    access: 'public',
-    contentType: mimeType,
-    token,
-  });
-
-  console.log('[storage] Upload successful. URL:', blob.url);
-
-  return {
-    url: blob.url,
-    publicId: blob.pathname,
-  };
 }
 
 /**
- * Deletes a profile photo from cloud storage.
- * @param url - The full URL of the photo to delete
+ * Deletes a profile photo from Cloudinary given its public_id or full Cloudinary secure_url.
+ * @param publicIdOrUrl - Cloudinary public_id or full URL to delete
  */
-export async function deleteProfilePhoto(url: string | null | undefined): Promise<void> {
-  if (!url) return;
+export async function deleteProfilePhoto(publicIdOrUrl: string | null | undefined): Promise<void> {
+  if (!publicIdOrUrl) return;
 
   try {
-    // Only attempt deletion if it's a recognised Vercel Blob URL
-    if (url.includes('blob.vercel-storage.com') || url.includes('public.blob')) {
-      const token = getBlobToken();
-      console.log('[storage] Deleting previous profile photo:', url);
-      await del(url, { token });
-      console.log('[storage] Previous photo deleted successfully.');
+    const client = getCloudinaryConfig();
+
+    let publicId = publicIdOrUrl;
+    if (publicIdOrUrl.startsWith('http://') || publicIdOrUrl.startsWith('https://')) {
+      const uploadIdx = publicIdOrUrl.indexOf('/upload/');
+      if (uploadIdx !== -1) {
+        let path = publicIdOrUrl.substring(uploadIdx + 8);
+        if (path.match(/^v\d+\//)) {
+          path = path.replace(/^v\d+\//, '');
+        }
+        publicId = path.substring(0, path.lastIndexOf('.')) || path;
+      }
     }
+
+    console.log('[storage] Deleting previous profile photo from Cloudinary:', publicId);
+    await client.uploader.destroy(publicId, { resource_type: 'image' });
+    console.log('[storage] Previous photo deleted from Cloudinary successfully.');
   } catch (error: any) {
-    // Non-blocking: log but do not fail the profile update
-    console.error('[storage] Failed to delete previous cloud image:', error?.name, error?.message);
+    // Non-blocking deletion
+    console.error('[storage] Failed to delete previous Cloudinary image:', error?.message);
   }
 }

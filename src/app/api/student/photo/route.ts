@@ -90,24 +90,27 @@ export async function POST(req: NextRequest) {
     const arrayBuffer = await file.arrayBuffer();
     const buffer = Buffer.from(arrayBuffer);
 
-    // Delete existing cloud image if present
-    if (student.profilePhotoUrl) {
-      await deleteProfilePhoto(student.profilePhotoUrl);
-    }
-
     // Safe filename generation using register number
     const extension = mimeType.split('/')[1] || 'jpg';
     const safeFilename = `${student.registerNumber}_${Date.now()}.${extension}`;
 
-    // Upload to cloud storage
+    // 1. Upload to Cloudinary storage
     const uploadResult = await uploadProfilePhoto(buffer, safeFilename, mimeType);
 
-    // Save to Database
+    // Capture old photo identifier before updating DB
+    const oldPhotoIdentifier = student.profilePhotoPublicId || student.profilePhotoUrl;
+
+    // 2. Save new secure URL & public ID to Database
     await updateStudentPhoto(
       targetStudentId,
       uploadResult.url,
       uploadResult.publicId
     );
+
+    // 3. Clean up old image from Cloudinary after successful DB update
+    if (oldPhotoIdentifier) {
+      await deleteProfilePhoto(oldPhotoIdentifier);
+    }
 
     return NextResponse.json({
       success: true,
@@ -160,13 +163,15 @@ export async function DELETE(req: NextRequest) {
       );
     }
 
-    // Delete existing cloud image if present
-    if (student.profilePhotoUrl) {
-      await deleteProfilePhoto(student.profilePhotoUrl);
-    }
+    const oldPhotoIdentifier = student.profilePhotoPublicId || student.profilePhotoUrl;
 
-    // Reset database fields
+    // Reset database fields first
     await updateStudentPhoto(targetStudentId, null, null);
+
+    // Delete existing cloud image after DB reset
+    if (oldPhotoIdentifier) {
+      await deleteProfilePhoto(oldPhotoIdentifier);
+    }
 
     return NextResponse.json({
       success: true,
