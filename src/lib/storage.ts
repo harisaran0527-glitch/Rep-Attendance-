@@ -1,8 +1,7 @@
 /**
  * Server-side only: Vercel Blob storage utilities for profile photo management.
  *
- * Explicitly passes `token` to @vercel/blob calls when available, while gracefully
- * allowing SDK auto-discovery as a fallback.
+ * Uses secure server-side process.env.BLOB_READ_WRITE_TOKEN for authentication.
  */
 
 if (typeof window !== 'undefined') {
@@ -17,13 +16,10 @@ export interface UploadResult {
 }
 
 /**
- * Gets the BLOB_READ_WRITE_TOKEN from environment variables if available.
+ * Gets the secure server-side BLOB_READ_WRITE_TOKEN from environment variables if available.
  */
 function getBlobToken(): string | undefined {
-  const token =
-    process.env.BLOB_READ_WRITE_TOKEN ||
-    process.env['BLOB_READ_WRITE_TOKEN'] ||
-    process.env.NEXT_PUBLIC_BLOB_READ_WRITE_TOKEN;
+  const token = process.env.BLOB_READ_WRITE_TOKEN || process.env['BLOB_READ_WRITE_TOKEN'];
 
   if (token && typeof token === 'string' && token.trim().length > 0) {
     return token.trim();
@@ -68,7 +64,7 @@ export async function uploadProfilePhoto(
       publicId: blob.pathname,
     };
   } catch (error: any) {
-    console.error('[storage] Upload failed:', error);
+    console.error('[storage] Upload failed:', error?.message || 'Storage error');
     if (!token && error?.message?.includes('credentials')) {
       throw new Error(
         'Storage credentials are not configured. Please set BLOB_READ_WRITE_TOKEN in environment variables.'
@@ -98,8 +94,8 @@ export async function deleteProfilePhoto(url: string | null | undefined): Promis
       }
       console.log('[storage] Previous photo deleted successfully.');
     }
-  } catch (error) {
+  } catch (error: any) {
     // Non-blocking: log but do not fail the profile update
-    console.error('[storage] Failed to delete previous cloud image:', error);
+    console.error('[storage] Failed to delete previous cloud image:', error?.message || 'Deletion error');
   }
 }
