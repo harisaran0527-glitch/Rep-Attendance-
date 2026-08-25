@@ -13,6 +13,22 @@ const ALLOWED_MIME_TYPES = [
   'image/webp',
 ];
 
+export async function GET() {
+  const cloudName = process.env.CLOUDINARY_CLOUD_NAME?.trim();
+  const apiKey = process.env.CLOUDINARY_API_KEY?.trim();
+  const apiSecret = process.env.CLOUDINARY_API_SECRET?.trim();
+
+  return NextResponse.json({
+    vercelEnv: process.env.VERCEL_ENV || 'unknown',
+    hasCloudName: typeof cloudName === 'string' && cloudName.length > 0,
+    hasApiKey: typeof apiKey === 'string' && apiKey.length > 0,
+    hasApiSecret: typeof apiSecret === 'string' && apiSecret.length > 0,
+    cloudNameLength: typeof cloudName === 'string' ? cloudName.length : 0,
+    apiKeyLength: typeof apiKey === 'string' ? apiKey.length : 0,
+    apiSecretLength: typeof apiSecret === 'string' ? apiSecret.length : 0,
+  });
+}
+
 export async function POST(req: NextRequest) {
   const requestUrl = req.url;
   const requestHost = req.headers.get('host') || 'unknown';
@@ -115,13 +131,6 @@ export async function POST(req: NextRequest) {
     // Safe filename generation using register number
     const extension = mimeType.split('/')[1] || 'jpg';
     const safeFilename = `${student.registerNumber}_${Date.now()}.${extension}`;
-
-    // Log env status immediately before calling storage
-    console.log('[POST /api/student/photo] Pre-upload env status:', {
-      hasCloudName: postDiag.hasCloudName,
-      hasApiKey: postDiag.hasApiKey,
-      hasApiSecret: postDiag.hasApiSecret,
-    });
 
     // 1. Upload to Cloudinary storage
     const uploadResult = await uploadProfilePhoto(buffer, safeFilename, mimeType);
