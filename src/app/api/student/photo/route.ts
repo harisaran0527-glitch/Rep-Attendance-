@@ -13,45 +13,7 @@ const ALLOWED_MIME_TYPES = [
   'image/webp',
 ];
 
-export async function GET() {
-  const cloudName = process.env.CLOUDINARY_CLOUD_NAME?.trim();
-  const apiKey = process.env.CLOUDINARY_API_KEY?.trim();
-  const apiSecret = process.env.CLOUDINARY_API_SECRET?.trim();
-
-  return NextResponse.json({
-    vercelEnv: process.env.VERCEL_ENV || 'unknown',
-    hasCloudName: typeof cloudName === 'string' && cloudName.length > 0,
-    hasApiKey: typeof apiKey === 'string' && apiKey.length > 0,
-    hasApiSecret: typeof apiSecret === 'string' && apiSecret.length > 0,
-    cloudNameLength: typeof cloudName === 'string' ? cloudName.length : 0,
-    apiKeyLength: typeof apiKey === 'string' ? apiKey.length : 0,
-    apiSecretLength: typeof apiSecret === 'string' ? apiSecret.length : 0,
-  });
-}
-
 export async function POST(req: NextRequest) {
-  const requestUrl = req.url;
-  const requestHost = req.headers.get('host') || 'unknown';
-  const vercelEnv = process.env.VERCEL_ENV || 'unknown';
-
-  const cloudName = process.env.CLOUDINARY_CLOUD_NAME?.trim();
-  const apiKey = process.env.CLOUDINARY_API_KEY?.trim();
-  const apiSecret = process.env.CLOUDINARY_API_SECRET?.trim();
-
-  const postDiag = {
-    requestUrl,
-    requestHost,
-    vercelEnv,
-    hasCloudName: typeof cloudName === 'string' && cloudName.length > 0,
-    hasApiKey: typeof apiKey === 'string' && apiKey.length > 0,
-    hasApiSecret: typeof apiSecret === 'string' && apiSecret.length > 0,
-    cloudNameLength: typeof cloudName === 'string' ? cloudName.length : 0,
-    apiKeyLength: typeof apiKey === 'string' ? apiKey.length : 0,
-    apiSecretLength: typeof apiSecret === 'string' ? apiSecret.length : 0,
-  };
-
-  console.log('[POST /api/student/photo] Invoked with safe diagnostics:', postDiag);
-
   try {
     const studentSession = await getStudentSession();
     const isStaff = await isStaffAuthenticated();
@@ -156,10 +118,9 @@ export async function POST(req: NextRequest) {
       message: 'Profile photo updated successfully.',
     });
   } catch (error: any) {
-    console.error('Error in POST /api/student/photo:', error, 'Diagnostics:', postDiag);
-    const safeErrorMsg = `${error.message || 'Internal server error.'} [Host: ${requestHost}, Env: ${vercelEnv}, CloudName: ${postDiag.hasCloudName}, ApiKey: ${postDiag.hasApiKey}, ApiSecret: ${postDiag.hasApiSecret}]`;
+    console.error('Error in POST /api/student/photo:', error);
     return NextResponse.json(
-      { success: false, error: safeErrorMsg },
+      { success: false, error: error.message || 'Internal server error.' },
       { status: 500 }
     );
   }
