@@ -28,6 +28,49 @@ function cleanValue(val?: string): string {
   return cleaned;
 }
 
+/**
+ * Safely parses CLOUDINARY_URL, supporting both formats:
+ * - cloudinary://API_KEY:API_SECRET@CLOUD_NAME
+ * - CLOUDINARY_URL=cloudinary://API_KEY:API_SECRET@CLOUD_NAME
+ */
+function parseCloudinaryUrl(rawUrl?: string): { url: string; apiKey?: string; apiSecret?: string; cloudName?: string } | null {
+  if (!rawUrl) return null;
+  let cleaned = cleanValue(rawUrl);
+
+  if (cleaned.startsWith('CLOUDINARY_URL=')) {
+    cleaned = cleaned.substring('CLOUDINARY_URL='.length).trim();
+    cleaned = cleaned.replace(/^['"]+|['"]+$/g, '').trim();
+  }
+
+  if (!cleaned.startsWith('cloudinary://')) {
+    return null;
+  }
+
+  try {
+    const afterScheme = cleaned.substring('cloudinary://'.length);
+    const atIdx = afterScheme.lastIndexOf('@');
+    if (atIdx === -1) return { url: cleaned };
+
+    const userInfo = afterScheme.substring(0, atIdx);
+    const cloudName = afterScheme.substring(atIdx + 1).trim();
+    const colonIdx = userInfo.indexOf(':');
+
+    if (colonIdx === -1) return { url: cleaned, cloudName };
+
+    const apiKey = userInfo.substring(0, colonIdx).trim();
+    const apiSecret = userInfo.substring(colonIdx + 1).trim();
+
+    return {
+      url: cleaned,
+      apiKey,
+      apiSecret,
+      cloudName,
+    };
+  } catch {
+    return { url: cleaned };
+  }
+}
+
 export interface CloudinaryDiagInfo {
   hasCloudName: boolean;
   cloudNameLength: number;
@@ -44,7 +87,8 @@ export interface CloudinaryDiagInfo {
 }
 
 /**
- * Inspects Cloudinary environment configuration safely without exposing any secrets.
+ * Inspects Cloudinary environment configuration safely at request time without exposing any secrets.
+ * Guaranteed never to throw during module import or build evaluation.
  */
 export function getCloudinaryDiagnostics(): CloudinaryDiagInfo {
   const rawCloudName = process.env.CLOUDINARY_CLOUD_NAME;
@@ -52,18 +96,20 @@ export function getCloudinaryDiagnostics(): CloudinaryDiagInfo {
   const rawApiSecret = process.env.CLOUDINARY_API_SECRET;
   const rawCloudinaryUrl = process.env.CLOUDINARY_URL;
 
-  const cloudName = cleanValue(rawCloudName);
-  const apiKey = cleanValue(rawApiKey);
-  const apiSecret = cleanValue(rawApiSecret);
-  const cloudinaryUrl = cleanValue(rawCloudinaryUrl);
+  const parsedUrl = parseCloudinaryUrl(rawCloudinaryUrl);
 
-  const hasVars = Boolean(cloudName && apiKey && apiSecret);
-  const hasUrl = Boolean(cloudinaryUrl && cloudinaryUrl.startsWith('cloudinary://'));
+  let cloudName = cleanValue(rawCloudName);
+  let apiKey = cleanValue(rawApiKey);
+  let apiSecret = cleanValue(rawApiSecret);
 
   let configMethod: CloudinaryDiagInfo['configMethod'] = 'UNCONFIGURED';
-  if (hasUrl) {
+
+  if (parsedUrl?.url) {
     configMethod = 'CLOUDINARY_URL';
-  } else if (hasVars) {
+    if (parsedUrl.apiKey) apiKey = parsedUrl.apiKey;
+    if (parsedUrl.apiSecret) apiSecret = parsedUrl.apiSecret;
+    if (parsedUrl.cloudName) cloudName = parsedUrl.cloudName;
+  } else if (cloudName && apiKey && apiSecret) {
     configMethod = 'ENV_VARIABLES';
   }
 
@@ -74,27 +120,28 @@ export function getCloudinaryDiagnostics(): CloudinaryDiagInfo {
     apiKeyLength: apiKey.length,
     apiKeyHasWhitespace: rawApiKey ? /\s/.test(rawApiKey) : false,
     apiKeyHasQuotes: rawApiKey ? /['"]/.test(rawApiKey) : false,
-    apiKeyIsDigitsOnly: apiKey ? /^\d+$/.test(apiKey) : false,
+    apiKeyIsDigitsOnly: Boolean(apiKey) && /^\d+$/.test(apiKey),
     hasApiSecret: Boolean(apiSecret),
     apiSecretLength: apiSecret.length,
-    hasCloudinaryUrl: Boolean(cloudinaryUrl),
-    cloudinaryUrlLength: cloudinaryUrl.length,
+    hasCloudinaryUrl: Boolean(parsedUrl?.url),
+    cloudinaryUrlLength: parsedUrl?.url ? parsedUrl.url.length : 0,
     configMethod,
   };
 }
 
 /**
- * Validates and configures Cloudinary server-side SDK dynamically at runtime.
+ * Validates and configures Cloudinary server-side SDK dynamically at runtime immediately before request execution.
+ * Guaranteed never to run or throw during module import or static build phase.
  */
 function getCloudinaryConfig() {
   const diag = getCloudinaryDiagnostics();
   const rawCloudinaryUrl = process.env.CLOUDINARY_URL;
-  const cloudinaryUrl = cleanValue(rawCloudinaryUrl);
+  const parsedUrl = parseCloudinaryUrl(rawCloudinaryUrl);
 
-  if (diag.configMethod === 'CLOUDINARY_URL') {
-    console.log('[storage] Configured Cloudinary SDK using CLOUDINARY_URL');
+  if (diag.configMethod === 'CLOUDINARY_URL' && parsedUrl?.url) {
+    console.log('[storage] Configured Cloudinary SDK using CLOUDINARY_URL (priority source)');
     cloudinary.config({
-      cloudinary_url: cloudinaryUrl,
+      cloudinary_url: parsedUrl.url,
       secure: true,
     });
     return cloudinary;
