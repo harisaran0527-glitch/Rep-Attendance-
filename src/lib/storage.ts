@@ -1,6 +1,9 @@
 /**
  * Server-side only: Vercel Blob storage utilities for profile photo management.
- * Uses @vercel/blob v2.x which automatically reads BLOB_READ_WRITE_TOKEN from env.
+ *
+ * Explicitly passes `token` to every @vercel/blob call because the v2 SDK's
+ * automatic credential resolution can fail in certain Vercel runtime
+ * configurations (OIDC present without BLOB_STORE_ID, env var not resolved).
  */
 
 if (typeof window !== 'undefined') {
@@ -15,9 +18,30 @@ export interface UploadResult {
 }
 
 /**
- * Uploads a profile photo to cloud storage (Vercel Blob).
- * @vercel/blob v2 automatically uses process.env.BLOB_READ_WRITE_TOKEN.
- * No need to pass token manually — it is resolved from the environment.
+ * Reads BLOB_READ_WRITE_TOKEN from the environment at call time.
+ * Returns the token string or throws a clear server error.
+ */
+function requireBlobToken(): string {
+  const token = process.env['BLOB_READ_WRITE_TOKEN'];
+
+  if (!token || token.trim() === '') {
+    console.error(
+      '[storage] BLOB_READ_WRITE_TOKEN is missing or empty.',
+      'BLOB_STORE_ID present:', !!process.env['BLOB_STORE_ID'],
+      'VERCEL_OIDC_TOKEN present:', !!process.env['VERCEL_OIDC_TOKEN'],
+      'VERCEL_ENV:', process.env['VERCEL_ENV'] ?? 'unset',
+      'NODE_ENV:', process.env['NODE_ENV'] ?? 'unset',
+    );
+    throw new Error(
+      'Profile photo upload is temporarily unavailable. Storage credentials are not configured.'
+    );
+  }
+
+  return token.trim();
+}
+
+/**
+ * Uploads a profile photo to Vercel Blob storage.
  *
  * @param buffer - File content as Buffer
  * @param filename - Original or derived filename
@@ -28,6 +52,8 @@ export async function uploadProfilePhoto(
   filename: string,
   mimeType: string
 ): Promise<UploadResult> {
+  const token = requireBlobToken();
+
   const sanitizedFilename = filename.replace(/[^a-zA-Z0-9_.-]/g, '_');
   const uniqueKey = `profile-photos/${Date.now()}_${sanitizedFilename}`;
 
@@ -36,7 +62,7 @@ export async function uploadProfilePhoto(
   const blob = await put(uniqueKey, buffer, {
     access: 'public',
     contentType: mimeType,
-    // token is resolved automatically from process.env.BLOB_READ_WRITE_TOKEN
+    token,
   });
 
   console.log('[storage] Upload successful. URL:', blob.url);
@@ -57,9 +83,9 @@ export async function deleteProfilePhoto(url: string | null | undefined): Promis
   try {
     // Only attempt deletion if it's a recognised Vercel Blob URL
     if (url.includes('blob.vercel-storage.com') || url.includes('public.blob')) {
+      const token = requireBlobToken();
       console.log('[storage] Deleting previous profile photo:', url);
-      // token is resolved automatically from process.env.BLOB_READ_WRITE_TOKEN
-      await del(url);
+      await del(url, { token });
       console.log('[storage] Previous photo deleted successfully.');
     }
   } catch (error) {
