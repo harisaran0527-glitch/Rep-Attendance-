@@ -7,10 +7,7 @@
  * - CLOUDINARY_API_SECRET
  */
 
-if (typeof window !== 'undefined') {
-  throw new Error('Cloudinary storage operations can only be executed on the server side.');
-}
-
+import 'server-only';
 import { v2 as cloudinary } from 'cloudinary';
 
 export interface UploadResult {
@@ -19,7 +16,7 @@ export interface UploadResult {
 }
 
 /**
- * Validates and configures Cloudinary server-side SDK.
+ * Validates and configures Cloudinary server-side SDK dynamically at runtime.
  */
 function getCloudinaryConfig() {
   const cloudName = process.env.CLOUDINARY_CLOUD_NAME?.trim();
@@ -27,8 +24,12 @@ function getCloudinaryConfig() {
   const apiSecret = process.env.CLOUDINARY_API_SECRET?.trim();
 
   if (!cloudName || !apiKey || !apiSecret) {
+    const missing: string[] = [];
+    if (!cloudName) missing.push('CLOUDINARY_CLOUD_NAME');
+    if (!apiKey) missing.push('CLOUDINARY_API_KEY');
+    if (!apiSecret) missing.push('CLOUDINARY_API_SECRET');
     throw new Error(
-      'CLOUDINARY_NOT_CONFIGURED: Missing CLOUDINARY_CLOUD_NAME, CLOUDINARY_API_KEY, or CLOUDINARY_API_SECRET in environment variables.'
+      `CLOUDINARY_NOT_CONFIGURED: Missing ${missing.join(', ')} in runtime environment variables.`
     );
   }
 

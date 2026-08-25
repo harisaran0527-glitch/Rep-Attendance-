@@ -14,6 +14,28 @@ const ALLOWED_MIME_TYPES = [
 ];
 
 export async function POST(req: NextRequest) {
+  const requestUrl = req.url;
+  const requestHost = req.headers.get('host') || 'unknown';
+  const vercelEnv = process.env.VERCEL_ENV || 'unknown';
+
+  const cloudName = process.env.CLOUDINARY_CLOUD_NAME?.trim();
+  const apiKey = process.env.CLOUDINARY_API_KEY?.trim();
+  const apiSecret = process.env.CLOUDINARY_API_SECRET?.trim();
+
+  const postDiag = {
+    requestUrl,
+    requestHost,
+    vercelEnv,
+    hasCloudName: typeof cloudName === 'string' && cloudName.length > 0,
+    hasApiKey: typeof apiKey === 'string' && apiKey.length > 0,
+    hasApiSecret: typeof apiSecret === 'string' && apiSecret.length > 0,
+    cloudNameLength: typeof cloudName === 'string' ? cloudName.length : 0,
+    apiKeyLength: typeof apiKey === 'string' ? apiKey.length : 0,
+    apiSecretLength: typeof apiSecret === 'string' ? apiSecret.length : 0,
+  };
+
+  console.log('[POST /api/student/photo] Invoked with safe diagnostics:', postDiag);
+
   try {
     const studentSession = await getStudentSession();
     const isStaff = await isStaffAuthenticated();
@@ -94,6 +116,13 @@ export async function POST(req: NextRequest) {
     const extension = mimeType.split('/')[1] || 'jpg';
     const safeFilename = `${student.registerNumber}_${Date.now()}.${extension}`;
 
+    // Log env status immediately before calling storage
+    console.log('[POST /api/student/photo] Pre-upload env status:', {
+      hasCloudName: postDiag.hasCloudName,
+      hasApiKey: postDiag.hasApiKey,
+      hasApiSecret: postDiag.hasApiSecret,
+    });
+
     // 1. Upload to Cloudinary storage
     const uploadResult = await uploadProfilePhoto(buffer, safeFilename, mimeType);
 
@@ -118,9 +147,10 @@ export async function POST(req: NextRequest) {
       message: 'Profile photo updated successfully.',
     });
   } catch (error: any) {
-    console.error('Error in POST /api/student/photo:', error);
+    console.error('Error in POST /api/student/photo:', error, 'Diagnostics:', postDiag);
+    const safeErrorMsg = `${error.message || 'Internal server error.'} [Host: ${requestHost}, Env: ${vercelEnv}, CloudName: ${postDiag.hasCloudName}, ApiKey: ${postDiag.hasApiKey}, ApiSecret: ${postDiag.hasApiSecret}]`;
     return NextResponse.json(
-      { success: false, error: error.message || 'Internal server error.' },
+      { success: false, error: safeErrorMsg },
       { status: 500 }
     );
   }
