@@ -7,7 +7,7 @@ A modern, responsive, and robust **Student Admission & Attendance Management Sys
 ## Features
 - **General Daily Attendance**: 1 attendance record per student per day with statuses (*Present, Absent, Late, On Duty, Medical Leave, Long Absent*).
 - **Strict Individual Attendance %**: Calculated per student from **13/07/2026** onwards: `(Present Days / Total Days) * 100`.
-- **Student Portal**: Student login via password or Google Sign-In with strict registered email verification.
+- **Student Portal**: Student login via email and password with registered student account verification.
 - **Admin Dashboard**: Live absentee summary, roll number tracking, password show/hide toggle, and instant attendance updates.
 - **Neon PostgreSQL**: Powered by cloud PostgreSQL database with complete data integrity.
 - **Excel & PDF Exports**: Downloadable daily and date-range attendance reports.

@@ -878,27 +878,6 @@ export async function studentLogoutAction() {
   return { success: true };
 }
 
-export async function studentGoogleLoginAction(googleEmail: string) {
-  if (!googleEmail || !googleEmail.trim()) {
-    return { success: false, error: 'Google Email address is required.' };
-  }
-
-  const cleanEmail = googleEmail.trim().toLowerCase();
-
-  const student = await prisma.student.findUnique({
-    where: { email: cleanEmail },
-  });
-
-  if (!student) {
-    return {
-      success: false,
-      error: `Access Denied: The Google account "${cleanEmail}" is not registered in the student system. Only registered students are allowed to log in. Please contact your Administrator.`,
-    };
-  }
-
-  await setStudentSession(student.email, student.id);
-  return { success: true };
-}
 
 export async function getStudentProfileStatsAction() {
   const session = await getStudentSession();
