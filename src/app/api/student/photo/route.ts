@@ -2,7 +2,7 @@ export const dynamic = 'force-dynamic';
 
 import { NextRequest, NextResponse } from 'next/server';
 import { revalidatePath } from 'next/cache';
-import { getStudentSession, isStaffAuthenticated } from '@/lib/auth';
+import { isStaffAuthenticated } from '@/lib/auth';
 import { uploadProfilePhoto, deleteProfilePhoto, getStorageDiagnostics } from '@/lib/storage';
 import { getStudentById, updateStudentPhoto } from '@/lib/db-api';
 
@@ -21,13 +21,12 @@ export async function GET() {
 
 export async function POST(req: NextRequest) {
   try {
-    const studentSession = await getStudentSession();
     const isStaff = await isStaffAuthenticated();
 
-    if (!studentSession && !isStaff) {
+    if (!isStaff) {
       return NextResponse.json(
-        { success: false, error: 'Unauthorized. Please log in.' },
-        { status: 401 }
+        { success: false, error: 'Unauthorized. Profile photo management is restricted to Administrators.' },
+        { status: 403 }
       );
     }
 
@@ -42,6 +41,15 @@ export async function POST(req: NextRequest) {
       );
     }
 
+    if (!requestedStudentId) {
+      return NextResponse.json(
+        { success: false, error: 'Student ID is required.' },
+        { status: 400 }
+      );
+    }
+
+    const targetStudentId = Number(requestedStudentId);
+
     // Server-side logging of file size and parameters
     console.log('[POST /api/student/photo] Received File Name:', file.name);
     console.log('[POST /api/student/photo] Received File Size (bytes):', file.size);
@@ -52,22 +60,6 @@ export async function POST(req: NextRequest) {
     if (file.size > MAX_FILE_SIZE) {
       return NextResponse.json(
         { success: false, error: 'Maximum file size is 2 MB' },
-        { status: 400 }
-      );
-    }
-
-    // Determine target student ID securely
-    let targetStudentId: number;
-    if (studentSession && !isStaff) {
-      // Students can ONLY update their own photo (derived from authenticated session)
-      targetStudentId = studentSession.studentId;
-    } else if (isStaff && requestedStudentId) {
-      targetStudentId = Number(requestedStudentId);
-    } else if (studentSession) {
-      targetStudentId = studentSession.studentId;
-    } else {
-      return NextResponse.json(
-        { success: false, error: 'Student ID is required.' },
         { status: 400 }
       );
     }
@@ -100,7 +92,7 @@ export async function POST(req: NextRequest) {
     const extension = mimeType.split('/')[1] || 'jpg';
     const safeFilename = `${student.registerNumber}_${Date.now()}.${extension}`;
 
-    // Step 1: Upload the NEW photo first using Student360 architecture
+    // Step 1: Upload the NEW photo first using Supabase Storage
     console.log('[POST /api/student/photo] Step: NEW_UPLOAD_START');
     const uploadResult = await uploadProfilePhoto(buffer, safeFilename, mimeType);
     console.log('[POST /api/student/photo] Step: NEW_UPLOAD_SUCCESS', {
@@ -144,7 +136,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({
       success: true,
       url: uploadResult.url,
-      message: 'Profile photo updated successfully.',
+      message: 'Profile photo updated successfully by Administrator.',
     });
   } catch (error: any) {
     console.error('[POST /api/student/photo] Execution Error:', error);
@@ -157,32 +149,25 @@ export async function POST(req: NextRequest) {
 
 export async function DELETE(req: NextRequest) {
   try {
-    const studentSession = await getStudentSession();
     const isStaff = await isStaffAuthenticated();
 
-    if (!studentSession && !isStaff) {
+    if (!isStaff) {
       return NextResponse.json(
-        { success: false, error: 'Unauthorized.' },
-        { status: 401 }
+        { success: false, error: 'Unauthorized. Profile photo management is restricted to Administrators.' },
+        { status: 403 }
       );
     }
 
     const body = await req.json().catch(() => ({}));
     
-    // Determine target student ID securely
-    let targetStudentId: number;
-    if (studentSession && !isStaff) {
-      targetStudentId = studentSession.studentId;
-    } else if (isStaff && body.studentId) {
-      targetStudentId = Number(body.studentId);
-    } else if (studentSession) {
-      targetStudentId = studentSession.studentId;
-    } else {
+    if (!body.studentId) {
       return NextResponse.json(
         { success: false, error: 'Student ID is required.' },
         { status: 400 }
       );
     }
+
+    const targetStudentId = Number(body.studentId);
 
     const student = await getStudentById(targetStudentId);
     if (!student) {
@@ -217,7 +202,7 @@ export async function DELETE(req: NextRequest) {
 
     return NextResponse.json({
       success: true,
-      message: 'Profile photo removed successfully.',
+      message: 'Profile photo removed successfully by Administrator.',
     });
   } catch (error: any) {
     console.error('Error in DELETE /api/student/photo:', error);

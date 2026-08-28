@@ -22,8 +22,6 @@ import {
 import { isSundayDate, isHoliday } from '@/lib/holidays';
 import ThemeToggle from '@/components/ThemeToggle';
 import StudentAvatar from '@/components/StudentAvatar';
-import PhotoUploadModal from '@/components/PhotoUploadModal';
-import { Camera } from 'lucide-react';
 
 interface StudentData {
   id: number;
@@ -85,8 +83,6 @@ export default function StudentDashboardClient({
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
 
-  const [photoUrl, setPhotoUrl] = useState<string | null>(student.profilePhotoUrl || null);
-  const [isPhotoModalOpen, setIsPhotoModalOpen] = useState(false);
 
   const [activeTab, setActiveTab] = useState<'overview' | 'calendar'>('overview');
 
@@ -230,16 +226,12 @@ export default function StudentDashboardClient({
       <header className="sticky top-0 z-30 bg-slate-900/80 light:bg-white/80 backdrop-blur-md border-b border-slate-800/80 light:border-slate-200">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <div
-              className="relative group cursor-pointer shrink-0"
-              onClick={() => setIsPhotoModalOpen(true)}
-              title="Click to manage profile photo"
-            >
+            <div className="shrink-0">
               <StudentAvatar
-                src={photoUrl}
+                src={student.profilePhotoUrl}
                 name={student.studentName}
                 size="sm"
-                className="ring-2 ring-indigo-500/40 shadow-sm hover:scale-105 transition-transform"
+                className="ring-2 ring-indigo-500/40 shadow-sm"
               />
             </div>
             <div>
@@ -309,20 +301,13 @@ export default function StudentDashboardClient({
           <div className="glass-card rounded-3xl p-6 flex flex-col justify-between shadow-xl">
             <div>
               <div className="flex items-center gap-4 pb-4 mb-4 border-b border-slate-800 light:border-slate-200">
-                <div
-                  className="relative group cursor-pointer shrink-0"
-                  onClick={() => setIsPhotoModalOpen(true)}
-                  title="Click to change profile photo"
-                >
+                <div className="shrink-0">
                   <StudentAvatar
-                    src={photoUrl}
+                    src={student.profilePhotoUrl}
                     name={student.studentName}
                     size="xl"
                     className="ring-2 ring-indigo-500/40 shadow-lg"
                   />
-                  <div className="absolute inset-0 bg-black/50 rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
-                    <Camera className="w-5 h-5 text-white" />
-                  </div>
                 </div>
 
                 <div className="flex-1 min-w-0">
@@ -333,15 +318,6 @@ export default function StudentDashboardClient({
                     </span>
                   </div>
                   <p className="text-xs text-indigo-400 font-mono font-bold mt-0.5">{student.registerNumber}</p>
-                  
-                  <button
-                    type="button"
-                    onClick={() => setIsPhotoModalOpen(true)}
-                    className="mt-2 inline-flex items-center gap-1.5 text-xs font-semibold text-indigo-400 hover:text-indigo-300 transition hover:underline"
-                  >
-                    <Camera className="w-3.5 h-3.5" />
-                    {photoUrl ? 'Change Photo' : 'Upload Photo'}
-                  </button>
                 </div>
               </div>
 
@@ -496,17 +472,7 @@ export default function StudentDashboardClient({
         )}
       </main>
 
-      {/* Photo Upload & Management Modal */}
-      <PhotoUploadModal
-        isOpen={isPhotoModalOpen}
-        onClose={() => setIsPhotoModalOpen(false)}
-        studentName={student.studentName}
-        currentPhotoUrl={photoUrl}
-        onPhotoUpdated={(newUrl) => {
-          setPhotoUrl(newUrl);
-          router.refresh();
-        }}
-      />
+
     </div>
   );
 }
