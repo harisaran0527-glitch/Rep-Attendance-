@@ -16,6 +16,9 @@ import {
   User,
   Mail,
   Settings as SettingsIcon,
+  Scan,
+  Award,
+  GraduationCap,
 } from 'lucide-react';
 import ThemeToggle from '@/components/ThemeToggle';
 
@@ -54,6 +57,9 @@ export default function AppLayoutClient({ children }: AppLayoutClientProps) {
     { name: 'Dashboard', href: '/', icon: LayoutDashboard },
     { name: 'Students', href: '/students', icon: Users },
     { name: 'Take Attendance', href: '/attendance', icon: CalendarCheck },
+    { name: 'Scan Barcode', href: '/scan-barcode', icon: Scan },
+    { name: 'Marks', href: '/marks', icon: Award },
+    { name: 'CGPA Record', href: '/cgpa', icon: GraduationCap },
     { name: 'Attendance History', href: '/history', icon: History },
     { name: 'Reports', href: '/reports', icon: FileBarChart },
     ...(isAdmin ? [

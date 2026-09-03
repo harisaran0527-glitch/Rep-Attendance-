@@ -65,12 +65,41 @@ interface MonthlyStat {
   percentage: number;
 }
 
+interface MaterialItem {
+  id?: number;
+  materialName: string;
+  quantity: number;
+  updatedAt?: Date | string;
+}
+
+interface ExamMarkItem {
+  id?: number;
+  examCategory: string;
+  subject: string;
+  obtainedMarks: number;
+  totalMarks: number;
+}
+
+interface SemesterRecordItem {
+  id?: number;
+  semester: number;
+  sgpa: number;
+  totalCredits: number;
+  creditsEarned: number;
+  arrearsCount: number;
+  arrearsCleared: number;
+}
+
 interface StudentDashboardClientProps {
   student: StudentData;
   stats: StatsData;
   history: HistoryItem[];
   subjectStats: SubjectStat[];
   monthlyStats: MonthlyStat[];
+  materials?: MaterialItem[];
+  marks?: ExamMarkItem[];
+  academicRecords?: SemesterRecordItem[];
+  cgpa?: number;
 }
 
 export default function StudentDashboardClient({
@@ -79,12 +108,16 @@ export default function StudentDashboardClient({
   history,
   subjectStats,
   monthlyStats,
+  materials = [],
+  marks = [],
+  academicRecords = [],
+  cgpa = 0,
 }: StudentDashboardClientProps) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
 
-
-  const [activeTab, setActiveTab] = useState<'overview' | 'calendar'>('overview');
+  const [activeTab, setActiveTab] = useState<'overview' | 'calendar' | 'marks' | 'materials' | 'academic'>('overview');
+  const [selectedExamCategory, setSelectedExamCategory] = useState<'CIA 1' | 'CIA 2' | 'Model Exam'>('CIA 1');
 
   // Calendar State
   const [currentDate, setCurrentDate] = useState(new Date());
@@ -389,22 +422,46 @@ export default function StudentDashboardClient({
         </div>
 
         {/* Tab Navigation */}
-        <div className="flex bg-slate-900/60 light:bg-slate-200/80 p-1.5 rounded-2xl border border-slate-800 light:border-slate-300 w-fit">
+        <div className="flex flex-wrap bg-slate-900/60 light:bg-slate-200/80 p-1.5 rounded-2xl border border-slate-800 light:border-slate-300 gap-1">
           <button
             onClick={() => setActiveTab('overview')}
-            className={`px-5 py-2.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
-              activeTab === 'overview' ? 'btn-gradient shadow-md' : 'text-slate-400 light:text-slate-700'
+            className={`px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+              activeTab === 'overview' ? 'btn-gradient shadow-md' : 'text-slate-400 light:text-slate-700 hover:text-slate-200'
             }`}
           >
             Monthly Progress
           </button>
           <button
             onClick={() => setActiveTab('calendar')}
-            className={`px-5 py-2.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
-              activeTab === 'calendar' ? 'btn-gradient shadow-md' : 'text-slate-400 light:text-slate-700'
+            className={`px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+              activeTab === 'calendar' ? 'btn-gradient shadow-md' : 'text-slate-400 light:text-slate-700 hover:text-slate-200'
             }`}
           >
             Attendance Calendar
+          </button>
+          <button
+            onClick={() => setActiveTab('marks')}
+            className={`px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+              activeTab === 'marks' ? 'btn-gradient shadow-md' : 'text-slate-400 light:text-slate-700 hover:text-slate-200'
+            }`}
+          >
+            My Marks
+          </button>
+          <button
+            onClick={() => setActiveTab('materials')}
+            className={`px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+              activeTab === 'materials' ? 'btn-gradient shadow-md' : 'text-slate-400 light:text-slate-700 hover:text-slate-200'
+            }`}
+          >
+            My College Materials
+          </button>
+          <button
+            onClick={() => setActiveTab('academic')}
+            className={`px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+              activeTab === 'academic' ? 'btn-gradient shadow-md' : 'text-slate-400 light:text-slate-700 hover:text-slate-200'
+            }`}
+          >
+            My Academic Record
           </button>
         </div>
 
@@ -435,6 +492,154 @@ export default function StudentDashboardClient({
                 </div>
               ))}
             </div>
+          </div>
+        )}
+
+        {/* Tab Content 2: Marks View-Only */}
+        {activeTab === 'marks' && (
+          <div className="glass-card p-6 rounded-3xl space-y-6">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-800 light:border-slate-200 pb-4">
+              <div className="flex items-center gap-2">
+                <Award className="w-5 h-5 text-indigo-400" />
+                <div>
+                  <h3 className="text-base font-bold text-slate-100 light:text-slate-900">My Exam Marks</h3>
+                  <p className="text-xs text-slate-400 light:text-slate-600">View-only record of internal exam scores.</p>
+                </div>
+              </div>
+
+              {/* Sub-category selector */}
+              <div className="flex bg-slate-950/60 light:bg-slate-100 p-1 rounded-xl border border-slate-800 light:border-slate-200">
+                {(['CIA 1', 'CIA 2', 'Model Exam'] as const).map((cat) => (
+                  <button
+                    key={cat}
+                    onClick={() => setSelectedExamCategory(cat)}
+                    className={`px-3 py-1.5 text-xs font-bold rounded-lg transition ${
+                      selectedExamCategory === cat
+                        ? 'bg-indigo-600 text-white shadow-sm'
+                        : 'text-slate-400 light:text-slate-600'
+                    }`}
+                  >
+                    {cat}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {(() => {
+              const categoryMarks = marks.filter((m) => m.examCategory === selectedExamCategory);
+              if (categoryMarks.length === 0) {
+                return (
+                  <div className="py-12 text-center text-slate-500 text-xs font-medium">
+                    No marks uploaded yet for {selectedExamCategory}.
+                  </div>
+                );
+              }
+              return (
+                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
+                  {categoryMarks.map((m, idx) => (
+                    <div
+                      key={idx}
+                      className="p-4 bg-slate-950/50 light:bg-slate-100 border border-slate-800 light:border-slate-200 rounded-2xl space-y-2"
+                    >
+                      <span className="text-xs font-bold text-slate-200 light:text-slate-800 block truncate">{m.subject}</span>
+                      <div className="flex items-baseline gap-1">
+                        <span className="text-2xl font-black text-indigo-400 light:text-indigo-600">{m.obtainedMarks}</span>
+                        <span className="text-xs text-slate-500 font-bold">/ {m.totalMarks}</span>
+                      </div>
+                      <div className="w-full h-1.5 rounded-full bg-slate-800 light:bg-slate-200 overflow-hidden">
+                        <div
+                          className="h-full bg-indigo-500 rounded-full"
+                          style={{ width: `${Math.min(100, (m.obtainedMarks / m.totalMarks) * 100)}%` }}
+                        />
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              );
+            })()}
+          </div>
+        )}
+
+        {/* Tab Content 3: College Materials View-Only */}
+        {activeTab === 'materials' && (
+          <div className="glass-card p-6 rounded-3xl space-y-6">
+            <div className="flex items-center gap-3 border-b border-slate-800 light:border-slate-200 pb-4">
+              <BookOpen className="w-5 h-5 text-indigo-400" />
+              <div>
+                <h3 className="text-base font-bold text-slate-100 light:text-slate-900">My College Materials</h3>
+                <p className="text-xs text-slate-400 light:text-slate-600">Items allocated to you by the department.</p>
+              </div>
+            </div>
+
+            {materials.length === 0 ? (
+              <div className="py-12 text-center text-slate-500 text-xs font-medium">
+                No materials recorded yet.
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
+                {materials.map((item, idx) => (
+                  <div
+                    key={idx}
+                    className="p-4 bg-slate-950/50 light:bg-slate-100 border border-slate-800 light:border-slate-200 rounded-2xl flex flex-col justify-between space-y-3"
+                  >
+                    <span className="text-xs font-bold text-slate-300 light:text-slate-700 truncate">{item.materialName}</span>
+                    <div className="flex items-baseline gap-1.5">
+                      <span className="text-3xl font-black text-indigo-400 light:text-indigo-600">{item.quantity}</span>
+                      <span className="text-[10px] uppercase font-bold text-slate-500">Units Issued</span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Tab Content 4: Academic Record View-Only */}
+        {activeTab === 'academic' && (
+          <div className="glass-card p-6 rounded-3xl space-y-6">
+            <div className="flex items-center justify-between border-b border-slate-800 light:border-slate-200 pb-4">
+              <div className="flex items-center gap-3">
+                <GraduationCap className="w-6 h-6 text-indigo-400" />
+                <div>
+                  <h3 className="text-base font-bold text-slate-100 light:text-slate-900">My Academic Record</h3>
+                  <p className="text-xs text-slate-400 light:text-slate-600">Official semester SGPA, credits, and cumulative CGPA.</p>
+                </div>
+              </div>
+
+              <div className="px-4 py-2 bg-indigo-600/20 border border-indigo-500/30 rounded-2xl text-right">
+                <span className="block text-[10px] uppercase font-extrabold text-slate-400">Current CGPA</span>
+                <span className="text-xl font-black text-indigo-400 light:text-indigo-600">{cgpa.toFixed(2)}</span>
+              </div>
+            </div>
+
+            {academicRecords.length === 0 ? (
+              <div className="py-12 text-center text-slate-500 text-xs font-medium">
+                No official semester records entered yet.
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {academicRecords.map((r, idx) => (
+                  <div
+                    key={idx}
+                    className="p-5 bg-slate-950/50 light:bg-slate-100 border border-slate-800 light:border-slate-200 rounded-2xl space-y-3"
+                  >
+                    <div className="flex items-center justify-between border-b border-slate-800/80 light:border-slate-200 pb-2">
+                      <span className="text-xs font-extrabold text-slate-200 light:text-slate-900">Semester {r.semester}</span>
+                      <span className="px-2.5 py-0.5 rounded-full text-xs font-black bg-indigo-500/15 text-indigo-400 border border-indigo-500/30">
+                        SGPA: {r.sgpa.toFixed(2)}
+                      </span>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-2 text-xs font-medium text-slate-400 light:text-slate-600">
+                      <p>Total Credits: <span className="font-bold text-slate-200 light:text-slate-800">{r.totalCredits}</span></p>
+                      <p>Earned Credits: <span className="font-bold text-slate-200 light:text-slate-800">{r.creditsEarned}</span></p>
+                      <p>Arrears: <span className="font-bold text-rose-400">{r.arrearsCount}</span></p>
+                      <p>Arrears Cleared: <span className="font-bold text-emerald-400">{r.arrearsCleared}</span></p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         )}
 

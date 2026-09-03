@@ -28,13 +28,66 @@ model Student {
   profilePhotoUrl String?
   profilePhotoPublicId String?
   studentType    String       @default("REGULAR") // "REGULAR" | "LATERAL_ENTRY"
-  createdAt      DateTime     @default(now())
-  attendances    Attendance[]
-  emailLogs      EmailLog[]
+  barcodeValue String?      @unique
+  createdAt    DateTime     @default(now())
+  attendances  Attendance[]
+  emailLogs    EmailLog[]
+  materials    CollegeMaterial[]
+  examMarks    ExamMark[]
+  academicRecords SemesterAcademicRecord[]
 
   @@index([registerNumber])
   @@index([department, year, section])
   @@index([studentType])
+  @@index([barcodeValue])
+}
+
+model CollegeMaterial {
+  id           Int      @id @default(autoincrement())
+  studentId    Int
+  materialName String
+  quantity     Int      @default(0)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  student Student @relation(fields: [studentId], references: [id], onDelete: Cascade)
+
+  @@unique([studentId, materialName])
+  @@index([studentId])
+}
+
+model ExamMark {
+  id            Int      @id @default(autoincrement())
+  studentId     Int
+  examCategory  String   // "CIA 1", "CIA 2", "Model Exam"
+  subject       String
+  obtainedMarks Float
+  totalMarks    Float
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  student Student @relation(fields: [studentId], references: [id], onDelete: Cascade)
+
+  @@unique([studentId, examCategory, subject])
+  @@index([studentId, examCategory])
+}
+
+model SemesterAcademicRecord {
+  id             Int      @id @default(autoincrement())
+  studentId      Int
+  semester       Int      // 1 to 8
+  sgpa           Float
+  totalCredits   Float
+  creditsEarned  Float
+  arrearsCount   Int      @default(0)
+  arrearsCleared Int      @default(0)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  student Student @relation(fields: [studentId], references: [id], onDelete: Cascade)
+
+  @@unique([studentId, semester])
+  @@index([studentId])
 }
 
 model Attendance {

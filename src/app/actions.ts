@@ -43,7 +43,15 @@ import {
   deleteTeacher,
   findTeacherByEmail,
   normalizeStatus,
-  invalidateCache
+  invalidateCache,
+  getStudentByBarcode,
+  getStudentMaterials,
+  saveStudentMaterial,
+  getStudentExamMarks,
+  saveStudentExamMark,
+  getStudentAcademicRecords,
+  saveSemesterAcademicRecord,
+  calculateStudentCGPA
 } from '@/lib/db-api';
 import { sendLowAttendanceEmail } from '@/lib/email';
 import { runMonthlyWarningEmailJob, MonthlyWarningJobOptions } from '@/lib/monthly-scheduler';
@@ -144,6 +152,7 @@ export async function addStudentAction(data: {
   year: string;
   section: string;
   studentType?: string;
+  barcodeValue?: string | null;
 }) {
   if (!(await isAdminAuthenticated())) {
     throw new Error('Unauthorized');
@@ -163,14 +172,19 @@ export async function addStudentAction(data: {
     await addStudent({ 
       ...data, 
       email: data.email.trim().toLowerCase(),
-      password: hashedPassword 
+      password: hashedPassword,
+      barcodeValue: data.barcodeValue ? data.barcodeValue.trim() : null,
     });
     revalidatePath('/students');
     revalidatePath('/dashboard');
     return { success: true };
   } catch (error: any) {
     if (error.code === 'P2002') {
-      return { success: false, error: 'Roll Number or Email already exists.' };
+      const target = error.meta?.target || [];
+      if (Array.isArray(target) && target.includes('barcodeValue')) {
+        return { success: false, error: 'This barcode value is already assigned to another student.' };
+      }
+      return { success: false, error: 'Roll Number, Email, or Barcode already exists.' };
     }
     return { success: false, error: 'Failed to add student.' };
   }
@@ -230,6 +244,7 @@ export async function editStudentAction(
     year: string;
     section: string;
     studentType?: string;
+    barcodeValue?: string | null;
   }
 ) {
   if (!(await isAdminAuthenticated())) {
@@ -243,13 +258,20 @@ export async function editStudentAction(
     } else {
       delete updatePayload.password;
     }
+    if (data.barcodeValue !== undefined) {
+      updatePayload.barcodeValue = data.barcodeValue ? data.barcodeValue.trim() : null;
+    }
     await editStudent(id, updatePayload);
     revalidatePath('/students');
     revalidatePath('/dashboard');
     return { success: true };
   } catch (error: any) {
     if (error.code === 'P2002') {
-      return { success: false, error: 'Roll Number or Email already exists.' };
+      const target = error.meta?.target || [];
+      if (Array.isArray(target) && target.includes('barcodeValue')) {
+        return { success: false, error: 'This barcode value is already assigned to another student.' };
+      }
+      return { success: false, error: 'Roll Number, Email, or Barcode already exists.' };
     }
     return { success: false, error: 'Failed to edit student.' };
   }
@@ -1244,6 +1266,324 @@ export async function triggerMonthlyWarningJobAction(options: { force?: boolean;
   } catch (error: any) {
     console.error('Error triggering monthly warning job action:', error);
     return { success: false, error: error?.message || 'Failed to execute monthly warning job.' };
+  }
+}
+
+// ==========================================
+// BARCODE & MATERIALS ACTIONS
+// ==========================================
+
+export async function scanBarcodeLookupAction(barcodeValue: string) {
+  if (!(await isStaffAuthenticated())) {
+    throw new Error('Unauthorized');
+  }
+
+  if (!barcodeValue || !barcodeValue.trim()) {
+    return { success: false, error: 'Barcode value is required.' };
+  }
+
+  try {
+    const student = await getStudentByBarcode(barcodeValue.trim());
+    if (!student) {
+      return { success: false, error: 'Student not found / Barcode not registered' };
+    }
+
+    const materials = await getStudentMaterials(student.id);
+
+    return {
+      success: true,
+      student: {
+        id: student.id,
+        studentName: student.studentName,
+        registerNumber: student.registerNumber,
+        year: student.year,
+        section: student.section,
+        department: student.department,
+        profilePhotoUrl: student.profilePhotoUrl,
+        barcodeValue: student.barcodeValue,
+      },
+      materials,
+    };
+  } catch (error) {
+    console.error('Error scanning barcode:', error);
+    return { success: false, error: 'Failed to search barcode.' };
+  }
+}
+
+export async function getStudentMaterialsAction(studentId: number) {
+  if (!(await isStaffAuthenticated())) {
+    throw new Error('Unauthorized');
+  }
+
+  try {
+    const materials = await getStudentMaterials(studentId);
+    return { success: true, materials };
+  } catch (error) {
+    return { success: false, error: 'Failed to load materials.' };
+  }
+}
+
+export async function saveStudentMaterialsAction(
+  studentId: number,
+  materialsList: { materialName: string; quantity: number }[]
+) {
+  if (!(await isStaffAuthenticated())) {
+    throw new Error('Unauthorized');
+  }
+
+  if (!studentId || !Array.isArray(materialsList)) {
+    return { success: false, error: 'Invalid parameters.' };
+  }
+
+  try {
+    for (const item of materialsList) {
+      if (!item.materialName || !item.materialName.trim()) continue;
+      const qty = Math.max(0, Math.floor(Number(item.quantity) || 0));
+      await saveStudentMaterial(studentId, item.materialName.trim(), qty);
+    }
+    revalidatePath('/scan-barcode');
+    return { success: true };
+  } catch (error) {
+    console.error('Error saving materials:', error);
+    return { success: false, error: 'Failed to save material records.' };
+  }
+}
+
+// ==========================================
+// MARKS ACTIONS
+// ==========================================
+
+export async function getStudentMarksAction(studentId: number) {
+  if (!(await isStaffAuthenticated())) {
+    throw new Error('Unauthorized');
+  }
+
+  try {
+    const student = await dbGetAllStudents().then((list) => list.find((s) => s.id === studentId));
+    if (!student) {
+      return { success: false, error: 'Student not found.' };
+    }
+
+    const marks = await getStudentExamMarks(studentId);
+
+    return {
+      success: true,
+      student: {
+        id: student.id,
+        studentName: student.studentName,
+        registerNumber: student.registerNumber,
+        department: student.department,
+        year: student.year,
+        section: student.section,
+        profilePhotoUrl: student.profilePhotoUrl,
+      },
+      marks,
+    };
+  } catch (error) {
+    console.error('Error fetching student marks:', error);
+    return { success: false, error: 'Failed to load marks.' };
+  }
+}
+
+export async function saveStudentMarksAction(
+  studentId: number,
+  examCategory: string,
+  marksList: { subject: string; obtainedMarks: number; totalMarks: number }[]
+) {
+  if (!(await isStaffAuthenticated())) {
+    throw new Error('Unauthorized');
+  }
+
+  if (!studentId || !examCategory || !Array.isArray(marksList)) {
+    return { success: false, error: 'Invalid payload.' };
+  }
+
+  // Validate all marks server-side
+  for (const item of marksList) {
+    const obtained = Number(item.obtainedMarks);
+    const total = Number(item.totalMarks);
+
+    if (isNaN(obtained) || obtained < 0) {
+      return { success: false, error: `Obtained marks for ${item.subject} must be >= 0.` };
+    }
+    if (isNaN(total) || total <= 0) {
+      return { success: false, error: `Total marks for ${item.subject} must be > 0.` };
+    }
+    if (obtained > total) {
+      return { success: false, error: `Obtained marks (${obtained}) cannot exceed total marks (${total}) for ${item.subject}.` };
+    }
+  }
+
+  try {
+    for (const item of marksList) {
+      await saveStudentExamMark(
+        studentId,
+        examCategory,
+        item.subject,
+        Number(item.obtainedMarks),
+        Number(item.totalMarks)
+      );
+    }
+    revalidatePath(`/marks/${studentId}`);
+    return { success: true };
+  } catch (error) {
+    console.error('Error saving exam marks:', error);
+    return { success: false, error: 'Failed to save exam marks.' };
+  }
+}
+
+// ==========================================
+// CGPA & ACADEMIC RECORDS ACTIONS
+// ==========================================
+
+export async function getAllStudentsWithCGPAAction() {
+  if (!(await isStaffAuthenticated())) {
+    throw new Error('Unauthorized');
+  }
+
+  try {
+    const students = await dbGetAllStudents();
+    const results = await Promise.all(
+      students.map(async (student) => {
+        const cgpa = await calculateStudentCGPA(student.id);
+        return {
+          ...student,
+          cgpa,
+        };
+      })
+    );
+    return { success: true, data: results };
+  } catch (error) {
+    console.error('Error fetching students with CGPA:', error);
+    return { success: false, error: 'Failed to load CGPA records.' };
+  }
+}
+
+export async function getStudentAcademicRecordsAction(studentId: number) {
+  if (!(await isStaffAuthenticated())) {
+    throw new Error('Unauthorized');
+  }
+
+  try {
+    const student = await dbGetAllStudents().then((list) => list.find((s) => s.id === studentId));
+    if (!student) {
+      return { success: false, error: 'Student not found.' };
+    }
+
+    const records = await getStudentAcademicRecords(studentId);
+    const cgpa = await calculateStudentCGPA(studentId);
+
+    return {
+      success: true,
+      student: {
+        id: student.id,
+        studentName: student.studentName,
+        registerNumber: student.registerNumber,
+        department: student.department,
+        year: student.year,
+        section: student.section,
+        profilePhotoUrl: student.profilePhotoUrl,
+      },
+      records,
+      cgpa,
+    };
+  } catch (error) {
+    console.error('Error fetching student academic records:', error);
+    return { success: false, error: 'Failed to load academic records.' };
+  }
+}
+
+export async function saveStudentAcademicRecordAction(
+  studentId: number,
+  semester: number,
+  recordData: {
+    sgpa: number;
+    totalCredits: number;
+    creditsEarned: number;
+    arrearsCount: number;
+    arrearsCleared: number;
+  }
+) {
+  if (!(await isStaffAuthenticated())) {
+    throw new Error('Unauthorized');
+  }
+
+  if (semester < 1 || semester > 8) {
+    return { success: false, error: 'Semester must be between 1 and 8.' };
+  }
+
+  const sgpa = Number(recordData.sgpa);
+  const totalCredits = Number(recordData.totalCredits);
+  const creditsEarned = Number(recordData.creditsEarned);
+  const arrearsCount = Number(recordData.arrearsCount);
+  const arrearsCleared = Number(recordData.arrearsCleared);
+
+  if (isNaN(sgpa) || sgpa < 0 || sgpa > 10) {
+    return { success: false, error: 'SGPA must be between 0.00 and 10.00.' };
+  }
+  if (isNaN(totalCredits) || totalCredits < 0) {
+    return { success: false, error: 'Total credits must be >= 0.' };
+  }
+  if (isNaN(creditsEarned) || creditsEarned < 0 || creditsEarned > totalCredits) {
+    return { success: false, error: 'Credits earned must be between 0 and total credits.' };
+  }
+  if (isNaN(arrearsCount) || arrearsCount < 0) {
+    return { success: false, error: 'Arrears count must be >= 0.' };
+  }
+  if (isNaN(arrearsCleared) || arrearsCleared < 0) {
+    return { success: false, error: 'Arrears cleared must be >= 0.' };
+  }
+
+  try {
+    await saveSemesterAcademicRecord(studentId, semester, {
+      sgpa,
+      totalCredits,
+      creditsEarned,
+      arrearsCount,
+      arrearsCleared,
+    });
+
+    const updatedCGPA = await calculateStudentCGPA(studentId);
+    revalidatePath(`/cgpa/${studentId}`);
+    revalidatePath('/cgpa');
+
+    return { success: true, cgpa: updatedCGPA };
+  } catch (error) {
+    console.error('Error saving academic record:', error);
+    return { success: false, error: 'Failed to save academic record.' };
+  }
+}
+
+// ==========================================
+// STUDENT PORTAL UNIFIED FULL DATA ACTION
+// ==========================================
+
+export async function getStudentPortalFullDataAction() {
+  const session = await getStudentSession();
+  if (!session || !session.studentId) {
+    throw new Error('Unauthorized');
+  }
+
+  const studentId = session.studentId;
+
+  try {
+    const [materials, marks, academicRecords, cgpa] = await Promise.all([
+      getStudentMaterials(studentId),
+      getStudentExamMarks(studentId),
+      getStudentAcademicRecords(studentId),
+      calculateStudentCGPA(studentId),
+    ]);
+
+    return {
+      success: true,
+      materials,
+      marks,
+      academicRecords,
+      cgpa,
+    };
+  } catch (error) {
+    console.error('Error loading student portal full data:', error);
+    return { success: false, error: 'Failed to load portal records.' };
   }
 }
 

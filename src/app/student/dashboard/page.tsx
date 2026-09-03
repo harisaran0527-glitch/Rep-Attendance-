@@ -4,7 +4,8 @@ import {
   getStudentProfileStatsAction, 
   getStudentHistoryAction, 
   getStudentSubjectStatsAction, 
-  getStudentMonthlyStatsAction 
+  getStudentMonthlyStatsAction,
+  getStudentPortalFullDataAction,
 } from '../../actions';
 import StudentDashboardClient from './StudentDashboardClient';
 
@@ -20,11 +21,12 @@ export default async function StudentDashboardPage() {
   }
 
   try {
-    const [profileStatsRes, history, subjectStats, monthlyStats] = await Promise.all([
+    const [profileStatsRes, history, subjectStats, monthlyStats, fullDataRes] = await Promise.all([
       getStudentProfileStatsAction(),
       getStudentHistoryAction(),
       getStudentSubjectStatsAction(),
       getStudentMonthlyStatsAction(),
+      getStudentPortalFullDataAction(),
     ]);
 
     return (
@@ -34,6 +36,10 @@ export default async function StudentDashboardPage() {
         history={history}
         subjectStats={subjectStats}
         monthlyStats={monthlyStats}
+        materials={fullDataRes.materials || []}
+        marks={fullDataRes.marks || []}
+        academicRecords={fullDataRes.academicRecords || []}
+        cgpa={fullDataRes.cgpa || 0}
       />
     );
   } catch (error) {

@@ -422,6 +422,7 @@ export async function addStudent(data: {
   year: string;
   section: string;
   studentType?: string;
+  barcodeValue?: string | null;
 }) {
   invalidateCache();
   return prisma.student.create({
@@ -434,6 +435,7 @@ export async function addStudent(data: {
       year: data.year.trim(),
       section: data.section.trim(),
       studentType: data.studentType || 'REGULAR',
+      barcodeValue: data.barcodeValue?.trim() || null,
     },
   });
 }
@@ -449,6 +451,7 @@ export async function editStudent(
     year: string;
     section: string;
     studentType?: string;
+    barcodeValue?: string | null;
   }
 ) {
   invalidateCache();
@@ -466,6 +469,9 @@ export async function editStudent(
   }
   if (data.studentType) {
     updateData.studentType = data.studentType;
+  }
+  if (data.barcodeValue !== undefined) {
+    updateData.barcodeValue = data.barcodeValue ? data.barcodeValue.trim() : null;
   }
 
   return prisma.student.update({
@@ -493,6 +499,29 @@ export async function getStudentById(id: number) {
       year: true,
       section: true,
       studentType: true,
+      barcodeValue: true,
+      profilePhotoUrl: true,
+      profilePhotoPublicId: true,
+      createdAt: true,
+    },
+  });
+}
+
+export async function getStudentByBarcode(barcodeValue: string) {
+  const cleanBarcode = barcodeValue.trim();
+  if (!cleanBarcode) return null;
+  return prisma.student.findUnique({
+    where: { barcodeValue: cleanBarcode },
+    select: {
+      id: true,
+      registerNumber: true,
+      studentName: true,
+      email: true,
+      department: true,
+      year: true,
+      section: true,
+      studentType: true,
+      barcodeValue: true,
       profilePhotoUrl: true,
       profilePhotoPublicId: true,
       createdAt: true,
@@ -526,6 +555,7 @@ export async function getAllStudents() {
       year: true,
       section: true,
       studentType: true,
+      barcodeValue: true,
       profilePhotoUrl: true,
       profilePhotoPublicId: true,
       createdAt: true,
@@ -543,12 +573,13 @@ export async function searchStudents(query: string) {
   return prisma.student.findMany({
     where: {
       OR: [
-        { registerNumber: { contains: cleanQuery } },
-        { studentName: { contains: cleanQuery } },
-        { department: { contains: cleanQuery } },
-        { year: { contains: cleanQuery } },
-        { section: { contains: cleanQuery } },
-        { studentType: { contains: cleanQuery } },
+        { registerNumber: { contains: cleanQuery, mode: 'insensitive' } },
+        { studentName: { contains: cleanQuery, mode: 'insensitive' } },
+        { department: { contains: cleanQuery, mode: 'insensitive' } },
+        { year: { contains: cleanQuery, mode: 'insensitive' } },
+        { section: { contains: cleanQuery, mode: 'insensitive' } },
+        { studentType: { contains: cleanQuery, mode: 'insensitive' } },
+        { barcodeValue: { contains: cleanQuery, mode: 'insensitive' } },
       ],
     },
     select: {
@@ -560,6 +591,7 @@ export async function searchStudents(query: string) {
       year: true,
       section: true,
       studentType: true,
+      barcodeValue: true,
       profilePhotoUrl: true,
       profilePhotoPublicId: true,
       createdAt: true,
@@ -568,6 +600,158 @@ export async function searchStudents(query: string) {
       registerNumber: 'asc',
     },
   });
+}
+
+// ==========================================
+// COLLEGE MATERIALS API
+// ==========================================
+
+export async function getStudentMaterials(studentId: number) {
+  return prisma.collegeMaterial.findMany({
+    where: { studentId },
+    orderBy: { materialName: 'asc' },
+  });
+}
+
+export async function saveStudentMaterial(studentId: number, materialName: string, quantity: number) {
+  const cleanName = materialName.trim();
+  const validQuantity = Math.max(0, Math.floor(quantity));
+  return prisma.collegeMaterial.upsert({
+    where: {
+      studentId_materialName: {
+        studentId,
+        materialName: cleanName,
+      },
+    },
+    update: {
+      quantity: validQuantity,
+    },
+    create: {
+      studentId,
+      materialName: cleanName,
+      quantity: validQuantity,
+    },
+  });
+}
+
+// ==========================================
+// EXAM MARKS API
+// ==========================================
+
+export async function getStudentExamMarks(studentId: number, examCategory?: string) {
+  const whereClause: any = { studentId };
+  if (examCategory) {
+    whereClause.examCategory = examCategory.trim();
+  }
+  return prisma.examMark.findMany({
+    where: whereClause,
+    orderBy: { subject: 'asc' },
+  });
+}
+
+export async function saveStudentExamMark(
+  studentId: number,
+  examCategory: string,
+  subject: string,
+  obtainedMarks: number,
+  totalMarks: number
+) {
+  const category = examCategory.trim();
+  const sub = subject.trim();
+
+  return prisma.examMark.upsert({
+    where: {
+      studentId_examCategory_subject: {
+        studentId,
+        examCategory: category,
+        subject: sub,
+      },
+    },
+    update: {
+      obtainedMarks,
+      totalMarks,
+    },
+    create: {
+      studentId,
+      examCategory: category,
+      subject: sub,
+      obtainedMarks,
+      totalMarks,
+    },
+  });
+}
+
+// ==========================================
+// ACADEMIC RECORD (SGPA / CGPA) API
+// ==========================================
+
+export async function getStudentAcademicRecords(studentId: number) {
+  return prisma.semesterAcademicRecord.findMany({
+    where: { studentId },
+    orderBy: { semester: 'asc' },
+  });
+}
+
+export async function saveSemesterAcademicRecord(
+  studentId: number,
+  semester: number,
+  data: {
+    sgpa: number;
+    totalCredits: number;
+    creditsEarned: number;
+    arrearsCount: number;
+    arrearsCleared: number;
+  }
+) {
+  return prisma.semesterAcademicRecord.upsert({
+    where: {
+      studentId_semester: {
+        studentId,
+        semester,
+      },
+    },
+    update: {
+      sgpa: data.sgpa,
+      totalCredits: data.totalCredits,
+      creditsEarned: data.creditsEarned,
+      arrearsCount: data.arrearsCount,
+      arrearsCleared: data.arrearsCleared,
+    },
+    create: {
+      studentId,
+      semester,
+      sgpa: data.sgpa,
+      totalCredits: data.totalCredits,
+      creditsEarned: data.creditsEarned,
+      arrearsCount: data.arrearsCount,
+      arrearsCleared: data.arrearsCleared,
+    },
+  });
+}
+
+export async function calculateStudentCGPA(studentId: number): Promise<number> {
+  const records = await getStudentAcademicRecords(studentId);
+  if (!records || records.length === 0) return 0.0;
+
+  let totalWeightedSGPA = 0;
+  let totalCreditsSum = 0;
+
+  for (const rec of records) {
+    if (rec.totalCredits > 0) {
+      totalWeightedSGPA += rec.sgpa * rec.totalCredits;
+      totalCreditsSum += rec.totalCredits;
+    }
+  }
+
+  if (totalCreditsSum > 0) {
+    const cgpa = totalWeightedSGPA / totalCreditsSum;
+    return Math.round(cgpa * 100) / 100;
+  }
+
+  // Fallback to simple average if credits are not specified (totalCredits === 0)
+  const sgpaSum = records.reduce((acc, r) => acc + r.sgpa, 0);
+  const avgSgpa = sgpaSum / records.length;
+  return Math.round(avgSgpa * 100) / 100;
 }
 
 // ==========================================

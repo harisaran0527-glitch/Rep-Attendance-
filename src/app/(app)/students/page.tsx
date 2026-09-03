@@ -39,6 +39,7 @@ interface Student {
   year: string;
   section: string;
   studentType?: string;
+  barcodeValue?: string | null;
   profilePhotoUrl?: string | null;
   percentage?: number;
 }
@@ -66,6 +67,9 @@ export default function StudentsPage() {
   const [year, setYear] = useState('');
   const [section, setSection] = useState('');
   const [studentType, setStudentType] = useState('REGULAR');
+  const [barcodeValue, setBarcodeValue] = useState('');
+  const [barcodeDecoding, setBarcodeDecoding] = useState(false);
+  const [barcodeSuccess, setBarcodeSuccess] = useState<string | null>(null);
 
   // Sorting & Pagination States
   const [sortField, setSortField] = useState<'registerNumber' | 'studentName' | 'department' | 'percentage'>('registerNumber');
@@ -110,6 +114,8 @@ export default function StudentsPage() {
     setYear('');
     setSection('');
     setStudentType('REGULAR');
+    setBarcodeValue('');
+    setBarcodeSuccess(null);
     setModalError(null);
     setIsModalOpen(true);
   };
@@ -125,8 +131,62 @@ export default function StudentsPage() {
     setYear(student.year);
     setSection(student.section);
     setStudentType(student.studentType || 'REGULAR');
+    setBarcodeValue(student.barcodeValue || '');
+    setBarcodeSuccess(null);
     setModalError(null);
     setIsModalOpen(true);
+  };
+
+  const handleBarcodeImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setBarcodeDecoding(true);
+    setModalError(null);
+    setBarcodeSuccess(null);
+
+    try {
+      const { BrowserMultiFormatReader } = await import('@zxing/library');
+      const codeReader = new BrowserMultiFormatReader();
+      const imageUrl = URL.createObjectURL(file);
+      
+      try {
+        const result = await codeReader.decodeFromImageUrl(imageUrl);
+        if (result && result.getText()) {
+          const decoded = result.getText().trim();
+          setBarcodeValue(decoded);
+          setBarcodeSuccess(`Barcode detected & decoded: ${decoded}`);
+          URL.revokeObjectURL(imageUrl);
+          setBarcodeDecoding(false);
+          return;
+        }
+      } catch (err) {
+        // Try fallback via html5-qrcode
+        try {
+          const { Html5Qrcode } = await import('html5-qrcode');
+          const html5QrCode = new Html5Qrcode('barcode-file-temp-element');
+          const decodedText = await html5QrCode.scanFile(file, true);
+          if (decodedText) {
+            setBarcodeValue(decodedText.trim());
+            setBarcodeSuccess(`Barcode detected & decoded: ${decodedText.trim()}`);
+            URL.revokeObjectURL(imageUrl);
+            setBarcodeDecoding(false);
+            return;
+          }
+        } catch (innerErr) {
+          // Failed both
+        }
+        URL.revokeObjectURL(imageUrl);
+      }
+
+      setModalError('No barcode could be detected in the uploaded image. Please upload a clear photo of the ID card barcode or enter the barcode value manually.');
+    } catch (err) {
+      console.error('Barcode decoding error:', err);
+      setModalError('Failed to process barcode image.');
+    } finally {
+      setBarcodeDecoding(false);
+      e.target.value = '';
+    }
   };
 
   const handleModalSubmit = async (e: React.FormEvent) => {
@@ -143,6 +203,7 @@ export default function StudentsPage() {
       year,
       section,
       studentType,
+      barcodeValue: barcodeValue.trim() || null,
     };
 
     try {
@@ -654,6 +715,51 @@ export default function StudentsPage() {
                   <option value="REGULAR">Regular Student</option>
                   <option value="LATERAL_ENTRY">Lateral Entry Student</option>
                 </select>
+              </div>
+
+              {/* ID Card Barcode Field */}
+              <div className="p-3 bg-slate-950/40 light:bg-slate-50 rounded-2xl border border-slate-800 light:border-slate-200 space-y-2">
+                <div className="flex items-center justify-between">
+                  <label className="block text-[10px] font-extrabold uppercase tracking-wider text-slate-400 light:text-slate-600">
+                    ID Card Barcode (Optional)
+                  </label>
+                  <label className="flex items-center gap-1.5 px-2.5 py-1 bg-indigo-600/20 hover:bg-indigo-600/30 text-indigo-400 light:text-indigo-600 border border-indigo-500/30 rounded-lg text-[10px] font-bold cursor-pointer transition">
+                    <Upload className="w-3 h-3" />
+                    <span>Upload ID Card Photo</span>
+                    <input
+                      type="file"
+                      accept="image/*"
+                      className="hidden"
+                      onChange={handleBarcodeImageUpload}
+                      disabled={barcodeDecoding}
+                    />
+                  </label>
+                </div>
+
+                <input
+                  type="text"
+                  value={barcodeValue}
+                  onChange={(e) => {
+                    setBarcodeValue(e.target.value);
+                    setBarcodeSuccess(null);
+                  }}
+                  placeholder="e.g. BAR123456789 (Or upload ID photo to auto-decode)"
+                  className="w-full px-3.5 py-2.5 bg-slate-900 light:bg-white border border-slate-700 light:border-slate-300 rounded-xl text-slate-100 light:text-slate-900 text-xs font-mono font-bold focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                />
+
+                {barcodeDecoding && (
+                  <p className="text-[11px] text-indigo-400 flex items-center gap-1.5 font-bold">
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                    Decoding barcode from uploaded photo...
+                  </p>
+                )}
+
+                {barcodeSuccess && (
+                  <p className="text-[11px] text-emerald-400 font-bold">
+                    ✓ {barcodeSuccess}
+                  </p>
+                )}
+                <div id="barcode-file-temp-element" style={{ display: 'none' }} />
               </div>
 
               <div className="pt-2 flex gap-3">
