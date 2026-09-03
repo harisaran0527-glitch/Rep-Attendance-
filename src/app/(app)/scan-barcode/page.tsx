@@ -1,9 +1,11 @@
 'use client';
 
 import { useState, useEffect, useRef } from 'react';
+import Link from 'next/link';
 import {
   scanBarcodeLookupAction,
   saveStudentMaterialsAction,
+  recordBarcodeScanAction,
 } from '@/app/actions';
 import {
   Camera,
@@ -57,11 +59,13 @@ export default function ScanBarcodePage() {
   const [isCropModalOpen, setIsCropModalOpen] = useState(false);
   const [uploadStatus, setUploadStatus] = useState<string>('');
 
-  // Scanned Student & Materials State
+  // Scanned Student, Materials, Purpose & Note State
   const [student, setStudent] = useState<StudentInfo | null>(null);
   const [materials, setMaterials] = useState<MaterialItem[]>([]);
   const [saveSuccess, setSaveSuccess] = useState<string | null>(null);
   const [savingMaterials, setSavingMaterials] = useState(false);
+  const [purpose, setPurpose] = useState<string>('Material Issue');
+  const [staffNote, setStaffNote] = useState<string>('');
 
   // Reference for html5-qrcode instance
   const html5QrCodeRef = useRef<any>(null);
@@ -185,6 +189,8 @@ export default function ScanBarcodePage() {
       const result = await scanBarcodeLookupAction(barcodeVal);
       if (result.success && result.student) {
         setStudent(result.student);
+        setPurpose('Material Issue');
+        setStaffNote('');
 
         // Pre-fill materials list: existing DB records combined with defaults if missing
         const dbMaterialsMap = new Map<string, number>();
@@ -208,6 +214,11 @@ export default function ScanBarcodePage() {
         });
 
         setMaterials(merged);
+
+        // Record persistent scan log entry on successful lookup
+        try {
+          await recordBarcodeScanAction(result.student.id, 'Verification');
+        } catch (_) {}
       } else {
         setStudent(null);
         setMaterials([]);
@@ -256,9 +267,9 @@ export default function ScanBarcodePage() {
     setScanError(null);
 
     try {
-      const res = await saveStudentMaterialsAction(student.id, materials);
+      const res = await saveStudentMaterialsAction(student.id, materials, purpose, staffNote);
       if (res.success) {
-        setSaveSuccess('College materials saved successfully!');
+        setSaveSuccess('Materials saved & transaction recorded in history!');
       } else {
         setScanError(res.error || 'Failed to save materials.');
       }
@@ -294,15 +305,24 @@ export default function ScanBarcodePage() {
           </p>
         </div>
 
-        {student && (
-          <button
-            onClick={handleScanAgain}
-            className="btn-gradient flex items-center justify-center gap-2 px-4 py-2.5 text-white font-bold rounded-xl shadow-lg shadow-indigo-600/20 text-xs cursor-pointer hover:scale-105 transition"
+        <div className="flex items-center gap-2 shrink-0">
+          <Link
+            href="/scan-barcode/history"
+            className="flex items-center gap-1.5 px-4 py-2.5 bg-slate-800 light:bg-slate-200 hover:bg-slate-700 text-slate-200 light:text-slate-800 font-bold rounded-xl text-xs cursor-pointer border border-slate-700 light:border-slate-300 transition"
           >
-            <RefreshCw className="w-4 h-4" />
-            <span>Scan Another ID Card</span>
-          </button>
-        )}
+            <Search className="w-4 h-4" />
+            <span>View Scan History</span>
+          </Link>
+          {student && (
+            <button
+              onClick={handleScanAgain}
+              className="btn-gradient flex items-center justify-center gap-2 px-4 py-2.5 text-white font-bold rounded-xl shadow-lg shadow-indigo-600/20 text-xs cursor-pointer hover:scale-105 transition"
+            >
+              <RefreshCw className="w-4 h-4" />
+              <span>Scan Another</span>
+            </button>
+          )}
+        </div>
       </div>
 
       {!student ? (
@@ -563,7 +583,48 @@ export default function ScanBarcodePage() {
               ))}
             </div>
 
-            <div className="pt-4 border-t border-slate-800 light:border-slate-200 flex justify-end">
+            {/* Purpose & Note */}
+            <div className="space-y-3">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-[10px] font-extrabold uppercase tracking-wider text-slate-400 light:text-slate-600 mb-1.5">
+                    Transaction Purpose
+                  </label>
+                  <select
+                    value={purpose}
+                    onChange={(e) => setPurpose(e.target.value)}
+                    className="w-full px-3 py-2.5 bg-slate-950/60 light:bg-slate-100 border border-slate-800 light:border-slate-300 rounded-xl text-slate-100 light:text-slate-900 text-xs font-bold focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                  >
+                    <option value="Material Issue">Material Issue</option>
+                    <option value="Verification">Verification</option>
+                    <option value="Book Distribution">Book Distribution</option>
+                    <option value="Note Distribution">Note Distribution</option>
+                    <option value="Record/Lab Material Distribution">Record/Lab Material Distribution</option>
+                    <option value="Other">Other</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-[10px] font-extrabold uppercase tracking-wider text-slate-400 light:text-slate-600 mb-1.5">
+                    Staff Note (Optional)
+                  </label>
+                  <input
+                    type="text"
+                    value={staffNote}
+                    onChange={(e) => setStaffNote(e.target.value)}
+                    placeholder="e.g. Issued for lab exam"
+                    className="w-full px-3 py-2.5 bg-slate-950/60 light:bg-slate-100 border border-slate-800 light:border-slate-300 rounded-xl text-slate-100 light:text-slate-900 text-xs font-medium focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                  />
+                </div>
+              </div>
+            </div>
+
+            <div className="pt-4 border-t border-slate-800 light:border-slate-200 flex items-center justify-between gap-3">
+              <Link
+                href="/scan-barcode/history"
+                className="text-xs font-bold text-indigo-400 hover:text-indigo-300 underline cursor-pointer"
+              >
+                View Full Scan History →
+              </Link>
               <button
                 onClick={handleSaveMaterials}
                 disabled={savingMaterials}
@@ -572,12 +633,12 @@ export default function ScanBarcodePage() {
                 {savingMaterials ? (
                   <>
                     <Loader2 className="w-4 h-4 animate-spin" />
-                    <span>Saving Materials...</span>
+                    <span>Saving...</span>
                   </>
                 ) : (
                   <>
                     <Save className="w-4 h-4" />
-                    <span>Save Materials Record</span>
+                    <span>Save &amp; Record Transaction</span>
                   </>
                 )}
               </button>

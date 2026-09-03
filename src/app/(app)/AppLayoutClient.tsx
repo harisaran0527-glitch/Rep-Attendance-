@@ -57,6 +57,7 @@ export default function AppLayoutClient({ children }: AppLayoutClientProps) {
     { name: 'Students', href: '/students', icon: Users },
     { name: 'Take Attendance', href: '/attendance', icon: CalendarCheck },
     { name: 'Scan Barcode', href: '/scan-barcode', icon: Scan },
+    { name: 'Scan History', href: '/scan-barcode/history', icon: History },
     { name: 'Marks', href: '/marks', icon: Award },
     { name: 'Attendance History', href: '/history', icon: History },
     { name: 'Reports', href: '/reports', icon: FileBarChart },

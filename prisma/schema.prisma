@@ -35,11 +35,37 @@ model Student {
   materials    CollegeMaterial[]
   examMarks    ExamMark[]
   academicRecords SemesterAcademicRecord[]
+  scanLogs     BarcodeScanLog[]
 
   @@index([registerNumber])
   @@index([department, year, section])
   @@index([studentType])
   @@index([barcodeValue])
+}
+
+model BarcodeScanLog {
+  id                     Int      @id @default(autoincrement())
+  studentId              Int
+  studentNameSnapshot    String
+  registerNumberSnapshot String
+  yearSnapshot           String
+  sectionSnapshot        String
+  departmentSnapshot     String
+  barcodeValue           String?
+  profilePhotoSnapshot   String?
+  purpose                String   @default("Material Issue")
+  materialsSnapshot      String   @default("[]")
+  handledBy              String?  @default("Staff")
+  note                   String?
+  scannedAt              DateTime @default(now())
+  createdAt              DateTime @default(now())
+
+  student Student @relation(fields: [studentId], references: [id], onDelete: Cascade)
+
+  @@index([studentId])
+  @@index([scannedAt])
+  @@index([registerNumberSnapshot])
+  @@index([yearSnapshot, sectionSnapshot])
 }
 
 model CollegeMaterial {

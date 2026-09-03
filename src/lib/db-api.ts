@@ -843,3 +843,101 @@ export async function findTeacherByEmail(email: string) {
     where: { email: email.trim().toLowerCase() },
   });
 }
+
+// ==========================================
+// BARCODE SCAN HISTORY API
+// ==========================================
+
+export interface ScanHistoryFilters {
+  search?: string;
+  year?: string;
+  section?: string;
+  purpose?: string;
+  startDate?: string; // ISO date string YYYY-MM-DD
+  endDate?: string;   // ISO date string YYYY-MM-DD
+}
+
+export async function createBarcodeScanLog(data: {
+  studentId: number;
+  purpose?: string;
+  materialsSnapshot?: { materialName: string; quantity: number }[];
+  handledBy?: string;
+  note?: string;
+}) {
+  const student = await prisma.student.findUnique({
+    where: { id: data.studentId },
+  });
+  if (!student) throw new Error('Student not found');
+
+  // Debounce: prevent duplicate entries from rapid camera frames within 20 seconds
+  const twentySecondsAgo = new Date(Date.now() - 20 * 1000);
+  const recentLog = await prisma.barcodeScanLog.findFirst({
+    where: {
+      studentId: data.studentId,
+      purpose: data.purpose ?? 'Material Issue',
+      scannedAt: { gte: twentySecondsAgo },
+    },
+    orderBy: { scannedAt: 'desc' },
+  });
+  if (recentLog) return recentLog;
+
+  const materialsJson = JSON.stringify(
+    Array.isArray(data.materialsSnapshot) ? data.materialsSnapshot : []
+  );
+
+  return prisma.barcodeScanLog.create({
+    data: {
+      studentId: data.studentId,
+      studentNameSnapshot: student.studentName,
+      registerNumberSnapshot: student.registerNumber,
+      yearSnapshot: student.year,
+      sectionSnapshot: student.section,
+      departmentSnapshot: student.department,
+      barcodeValue: student.barcodeValue ?? null,
+      profilePhotoSnapshot: student.profilePhotoUrl ?? null,
+      purpose: data.purpose ?? 'Material Issue',
+      materialsSnapshot: materialsJson,
+      handledBy: data.handledBy ?? 'Staff',
+      note: data.note ?? null,
+    },
+  });
+}
+
+export async function getAllBarcodeScanHistory(filters?: ScanHistoryFilters) {
+  const where: any = {};
+
+  // Text search across name and register number
+  if (filters?.search && filters.search.trim()) {
+    const q = filters.search.trim();
+    where.OR = [
+      { studentNameSnapshot: { contains: q, mode: 'insensitive' } },
+      { registerNumberSnapshot: { contains: q, mode: 'insensitive' } },
+    ];
+  }
+
+  if (filters?.year && filters.year !== 'All') {
+    where.yearSnapshot = filters.year;
+  }
+  if (filters?.section && filters.section !== 'All') {
+    where.sectionSnapshot = filters.section;
+  }
+  if (filters?.purpose && filters.purpose !== 'All') {
+    where.purpose = filters.purpose;
+  }
+
+  // Date range filter
+  if (filters?.startDate || filters?.endDate) {
+    where.scannedAt = {};
+    if (filters.startDate) {
+      where.scannedAt.gte = new Date(filters.startDate + 'T00:00:00.000Z');
+    }
+    if (filters.endDate) {
+      where.scannedAt.lte = new Date(filters.endDate + 'T23:59:59.999Z');
+    }
+  }
+
+  return prisma.barcodeScanLog.findMany({
+    where,
+    orderBy: { scannedAt: 'desc' },
+  });
+}

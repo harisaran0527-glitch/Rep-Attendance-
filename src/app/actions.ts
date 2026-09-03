@@ -49,6 +49,9 @@ import {
   saveStudentMaterial,
   getStudentExamMarks,
   saveStudentExamMark,
+  createBarcodeScanLog,
+  getAllBarcodeScanHistory,
+  type ScanHistoryFilters,
 } from '@/lib/db-api';
 import { sendLowAttendanceEmail } from '@/lib/email';
 import { runMonthlyWarningEmailJob, MonthlyWarningJobOptions } from '@/lib/monthly-scheduler';
@@ -1322,7 +1325,9 @@ export async function getStudentMaterialsAction(studentId: number) {
 
 export async function saveStudentMaterialsAction(
   studentId: number,
-  materialsList: { materialName: string; quantity: number }[]
+  materialsList: { materialName: string; quantity: number }[],
+  purpose?: string,
+  note?: string
 ) {
   if (!(await isStaffAuthenticated())) {
     throw new Error('Unauthorized');
@@ -1333,12 +1338,26 @@ export async function saveStudentMaterialsAction(
   }
 
   try {
+    // Save current material quantities to CollegeMaterial table
     for (const item of materialsList) {
       if (!item.materialName || !item.materialName.trim()) continue;
       const qty = Math.max(0, Math.floor(Number(item.quantity) || 0));
       await saveStudentMaterial(studentId, item.materialName.trim(), qty);
     }
+
+    // Create a persistent scan history log with immutable material snapshot
+    const nonZeroMaterials = materialsList.filter(
+      (m) => m.materialName?.trim() && Number(m.quantity) > 0
+    );
+    await createBarcodeScanLog({
+      studentId,
+      purpose: purpose?.trim() || 'Material Issue',
+      materialsSnapshot: nonZeroMaterials,
+      note: note?.trim() || undefined,
+    });
+
     revalidatePath('/scan-barcode');
+    revalidatePath('/scan-barcode/history');
     return { success: true };
   } catch (error) {
     console.error('Error saving materials:', error);
@@ -1457,5 +1476,41 @@ export async function getStudentPortalFullDataAction() {
   } catch (error) {
     console.error('Error loading student portal full data:', error);
     return { success: false, error: 'Failed to load portal records.' };
+  }
+}
+
+// ==========================================
+// BARCODE SCAN HISTORY ACTIONS
+// ==========================================
+
+export async function recordBarcodeScanAction(
+  studentId: number,
+  purpose: string = 'Verification',
+  note?: string
+) {
+  if (!(await isStaffAuthenticated())) {
+    throw new Error('Unauthorized');
+  }
+  try {
+    await createBarcodeScanLog({ studentId, purpose, note });
+    revalidatePath('/scan-barcode');
+    revalidatePath('/scan-barcode/history');
+    return { success: true };
+  } catch (error) {
+    console.error('Error recording scan log:', error);
+    return { success: false, error: 'Failed to record scan.' };
+  }
+}
+
+export async function getAllScanHistoryAction(filters?: ScanHistoryFilters) {
+  if (!(await isStaffAuthenticated())) {
+    throw new Error('Unauthorized');
+  }
+  try {
+    const logs = await getAllBarcodeScanHistory(filters);
+    return { success: true, logs };
+  } catch (error) {
+    console.error('Error fetching scan history:', error);
+    return { success: false, error: 'Failed to load scan history.', logs: [] as any[] };
   }
 }
