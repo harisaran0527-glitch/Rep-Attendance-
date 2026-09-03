@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useRef, useEffect } from 'react';
-import { X, Crop, CheckCircle2, AlertCircle, RefreshCw, Layers } from 'lucide-react';
+import { X, Crop, CheckCircle2, AlertCircle, RefreshCw, Layers, FileText, Check } from 'lucide-react';
 import { decodeBarcodeFromCroppedRegion, loadImageFromFile, DecodeResult } from '@/lib/barcodeDecoder';
 
 interface BarcodeCropModalProps {
@@ -25,30 +25,41 @@ export default function BarcodeCropModal({
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [decoding, setDecoding] = useState<boolean>(false);
 
-  // Selection Box normalized coordinates [0..1]
+  // Diagnostic log details (dev only)
+  const [diagInfo, setDiagInfo] = useState<string | null>(null);
+
+  // OCR / Printed text candidates
+  const [textCandidates, setTextCandidates] = useState<string[]>([]);
+  const [selectedText, setSelectedText] = useState<string>('');
+
+  // Normalized Selection Box relative to DISPLAYED IMAGE [0..1]
   const [cropBox, setCropBox] = useState<{ x: number; y: number; w: number; h: number }>({
-    x: 0.1,
-    y: 0.4,
-    w: 0.8,
-    h: 0.5,
+    x: 0.05,
+    y: 0.35,
+    w: 0.9,
+    h: 0.55,
   });
 
   const [isDragging, setIsDragging] = useState<boolean>(false);
   const [dragStart, setDragStart] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
-  const containerRef = useRef<HTMLDivElement>(null);
+
   const imgRef = useRef<HTMLImageElement>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (isOpen && imageFile) {
       setLoadingImage(true);
       setErrorMessage(null);
       setStatusMessage('');
-      
+      setDiagInfo(null);
+      setTextCandidates([]);
+      setSelectedText('');
+
       loadImageFromFile(imageFile)
         .then((img) => {
           setImageElement(img);
           setLoadingImage(false);
-          // Default to bottom 60% where ID barcodes usually reside
+          // Default to bottom 60% of image where ID card barcodes are typically located
           setCropBox({ x: 0.05, y: 0.35, w: 0.9, h: 0.6 });
         })
         .catch(() => {
@@ -62,7 +73,7 @@ export default function BarcodeCropModal({
 
   if (!isOpen || !imageFile) return null;
 
-  // Preset Handlers
+  // Presets relative to displayed image
   const handlePreset = (preset: 'bottom' | 'top' | 'center' | 'full') => {
     setErrorMessage(null);
     if (preset === 'bottom') {
@@ -76,52 +87,90 @@ export default function BarcodeCropModal({
     }
   };
 
-  // Drag Box Handler
-  const handleMouseDown = (e: React.MouseEvent<HTMLDivElement>) => {
-    if (!containerRef.current) return;
-    const rect = containerRef.current.getBoundingClientRect();
-    const startX = (e.clientX - rect.left) / rect.width;
-    const startY = (e.clientY - rect.top) / rect.height;
+  // Helper: Calculate mouse position relative strictly to the displayed image tag (imgRef)
+  const getMousePosOnDisplayedImage = (clientX: number, clientY: number) => {
+    if (!imgRef.current) return { x: 0, y: 0 };
+    const imgRect = imgRef.current.getBoundingClientRect();
 
-    setIsDragging(true);
-    setDragStart({ x: startX, y: startY });
-    setCropBox({ x: startX, y: startY, w: 0.05, h: 0.05 });
+    const mouseX = clientX - imgRect.left;
+    const mouseY = clientY - imgRect.top;
+
+    const clampedX = Math.max(0, Math.min(imgRect.width, mouseX));
+    const clampedY = Math.max(0, Math.min(imgRect.height, mouseY));
+
+    return {
+      x: clampedX / imgRect.width,
+      y: clampedY / imgRect.height,
+    };
   };
 
-  const handleMouseMove = (e: React.MouseEvent<HTMLDivElement>) => {
-    if (!isDragging || !containerRef.current) return;
-    const rect = containerRef.current.getBoundingClientRect();
-    const currentX = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
-    const currentY = Math.max(0, Math.min(1, (e.clientY - rect.top) / rect.height));
+  const handleMouseDown = (e: React.MouseEvent) => {
+    if (!imgRef.current) return;
+    const pos = getMousePosOnDisplayedImage(e.clientX, e.clientY);
+    setIsDragging(true);
+    setDragStart(pos);
+    setCropBox({ x: pos.x, y: pos.y, w: 0.05, h: 0.05 });
+  };
 
-    const x = Math.min(dragStart.x, currentX);
-    const y = Math.min(dragStart.y, currentY);
-    const w = Math.abs(currentX - dragStart.x);
-    const h = Math.abs(currentY - dragStart.y);
+  const handleMouseMove = (e: React.MouseEvent) => {
+    if (!isDragging || !imgRef.current) return;
+    const current = getMousePosOnDisplayedImage(e.clientX, e.clientY);
 
-    setCropBox({ x, y, w: Math.max(0.05, w), h: Math.max(0.05, h) });
+    const x = Math.min(dragStart.x, current.x);
+    const y = Math.min(dragStart.y, current.y);
+    const w = Math.abs(current.x - dragStart.x);
+    const h = Math.abs(current.y - dragStart.y);
+
+    setCropBox({
+      x,
+      y,
+      w: Math.max(0.05, w),
+      h: Math.max(0.05, h),
+    });
   };
 
   const handleMouseUp = () => {
     setIsDragging(false);
   };
 
-  // Decode Selected Region Action
+  // Action: Decode Cropped Region
   const handleDecodeCropped = async () => {
-    if (!imageElement) return;
+    if (!imageElement || !imgRef.current) return;
     setDecoding(true);
     setErrorMessage(null);
     setStatusMessage('Reading barcode...');
+    setDiagInfo(null);
+    setTextCandidates([]);
+
+    const imgRect = imgRef.current.getBoundingClientRect();
+    const displayedWidth = imgRect.width;
+    const displayedHeight = imgRect.height;
 
     const naturalWidth = imageElement.naturalWidth || imageElement.width;
     const naturalHeight = imageElement.naturalHeight || imageElement.height;
 
+    // Scale mappings from display size to natural size
+    const scaleX = naturalWidth / displayedWidth;
+    const scaleY = naturalHeight / displayedHeight;
+
     const pixelRect = {
-      x: Math.round(cropBox.x * naturalWidth),
-      y: Math.round(cropBox.y * naturalHeight),
+      x: Math.round(cropBox.x * displayedWidth * scaleX),
+      y: Math.round(cropBox.y * displayedWidth * scaleX > naturalWidth ? naturalWidth : cropBox.x * naturalWidth),
       width: Math.round(cropBox.w * naturalWidth),
       height: Math.round(cropBox.h * naturalHeight),
     };
+
+    // Correct pixel bounds mapping
+    pixelRect.x = Math.max(0, Math.min(naturalWidth - 1, Math.round(cropBox.x * naturalWidth)));
+    pixelRect.y = Math.max(0, Math.min(naturalHeight - 1, Math.round(cropBox.y * naturalHeight)));
+    pixelRect.width = Math.max(10, Math.min(naturalWidth - pixelRect.x, Math.round(cropBox.w * naturalWidth)));
+    pixelRect.height = Math.max(10, Math.min(naturalHeight - pixelRect.y, Math.round(cropBox.h * naturalHeight)));
+
+    if (process.env.NODE_ENV !== 'production') {
+      setDiagInfo(
+        `Natural Size: ${naturalWidth}x${naturalHeight} | Displayed Size: ${Math.round(displayedWidth)}x${Math.round(displayedHeight)} | Scale: ${scaleX.toFixed(2)}x${scaleY.toFixed(2)} | Pixel Crop: [x:${pixelRect.x}, y:${pixelRect.y}, w:${pixelRect.width}, h:${pixelRect.height}]`
+      );
+    }
 
     try {
       const result: DecodeResult = await decodeBarcodeFromCroppedRegion(
@@ -138,10 +187,10 @@ export default function BarcodeCropModal({
         setStatusMessage('Barcode not detected');
         setErrorMessage(
           result.error ||
-            'Barcode not detected in cropped area. Please try a tighter crop over the barcode or enter manually.'
+            'Barcode could not be detected in the cropped area. Please try a tighter crop or enter the barcode value manually.'
         );
       }
-    } catch (err) {
+    } catch (err: any) {
       setStatusMessage('Barcode not detected');
       setErrorMessage('Failed to decode selected cropped region.');
     } finally {
@@ -161,7 +210,7 @@ export default function BarcodeCropModal({
             <div>
               <h3 className="text-base font-bold text-slate-100 light:text-slate-900">Crop Barcode Region</h3>
               <p className="text-xs text-slate-400 light:text-slate-600">
-                Select the area containing the barcode on your college ID card.
+                Select the barcode area on your college ID card photo.
               </p>
             </div>
           </div>
@@ -176,7 +225,7 @@ export default function BarcodeCropModal({
 
         {/* Content Body */}
         <div className="py-4 flex-1 flex flex-col gap-4 overflow-y-auto min-h-0">
-          {/* Quick Presets */}
+          {/* Presets */}
           <div className="flex flex-wrap items-center gap-2">
             <span className="text-xs font-semibold text-slate-400 mr-1 flex items-center gap-1">
               <Layers className="w-3.5 h-3.5" /> Presets:
@@ -185,7 +234,7 @@ export default function BarcodeCropModal({
               onClick={() => handlePreset('bottom')}
               className="px-3 py-1 text-xs font-bold rounded-lg bg-indigo-600/20 hover:bg-indigo-600/30 text-indigo-300 border border-indigo-500/30 transition cursor-pointer"
             >
-              Bottom Half (ID Card)
+              Bottom Half (ID Barcode)
             </button>
             <button
               onClick={() => handlePreset('center')}
@@ -208,30 +257,30 @@ export default function BarcodeCropModal({
           </div>
 
           {/* Interactive Crop Viewport */}
-          <div className="relative w-full h-64 bg-slate-950 rounded-2xl border border-slate-800 overflow-hidden flex items-center justify-center select-none">
+          <div
+            ref={containerRef}
+            className="relative w-full h-64 bg-slate-950 rounded-2xl border border-slate-800 overflow-hidden flex items-center justify-center select-none"
+          >
             {loadingImage ? (
               <div className="flex flex-col items-center justify-center text-slate-400 gap-2">
                 <RefreshCw className="w-6 h-6 animate-spin text-indigo-400" />
                 <span className="text-xs font-medium">Loading uploaded image...</span>
               </div>
             ) : imageElement ? (
-              <div
-                ref={containerRef}
-                onMouseDown={handleMouseDown}
-                onMouseMove={handleMouseMove}
-                onMouseUp={handleMouseUp}
-                onMouseLeave={handleMouseUp}
-                className="relative w-full h-full flex items-center justify-center cursor-crosshair"
-              >
-                {/* Image */}
+              <div className="relative inline-block max-w-full max-h-full">
+                {/* Image Tag */}
                 <img
                   ref={imgRef}
                   src={imageElement.src}
                   alt="Uploaded College ID Card"
-                  className="max-w-full max-h-full object-contain pointer-events-none"
+                  onMouseDown={handleMouseDown}
+                  onMouseMove={handleMouseMove}
+                  onMouseUp={handleMouseUp}
+                  onMouseLeave={handleMouseUp}
+                  className="max-w-full max-h-64 object-contain cursor-crosshair block"
                 />
 
-                {/* Overlay Box */}
+                {/* Crop Box Overlay attached to image */}
                 <div
                   className="absolute border-2 border-indigo-400 bg-indigo-500/20 shadow-lg pointer-events-none rounded-lg"
                   style={{
@@ -241,15 +290,15 @@ export default function BarcodeCropModal({
                     height: `${cropBox.h * 100}%`,
                   }}
                 >
-                  <div className="absolute top-1 left-2 bg-indigo-950/80 text-indigo-200 text-[10px] font-mono font-bold px-1.5 py-0.5 rounded border border-indigo-500/30">
-                    Barcode Crop Area
+                  <div className="absolute top-1 left-2 bg-indigo-950/90 text-indigo-200 text-[10px] font-mono font-bold px-1.5 py-0.5 rounded border border-indigo-500/40 shadow-sm">
+                    Selected Barcode Area
                   </div>
                 </div>
               </div>
             ) : null}
           </div>
 
-          {/* Live Status and Error Messages */}
+          {/* Status & Diagnostics */}
           {statusMessage && (
             <div className="flex items-center gap-2 px-3.5 py-2 rounded-xl bg-indigo-500/10 border border-indigo-500/20 text-indigo-300 text-xs font-medium">
               {decoding ? (
@@ -260,6 +309,13 @@ export default function BarcodeCropModal({
                 <AlertCircle className="w-3.5 h-3.5 text-indigo-400 shrink-0" />
               )}
               <span>{statusMessage}</span>
+            </div>
+          )}
+
+          {/* Dev Diagnostic Output */}
+          {diagInfo && process.env.NODE_ENV !== 'production' && (
+            <div className="p-2.5 bg-slate-900 border border-slate-800 rounded-xl text-[10px] font-mono text-slate-400 break-all">
+              {diagInfo}
             </div>
           )}
 
