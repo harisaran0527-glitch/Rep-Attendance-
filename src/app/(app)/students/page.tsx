@@ -28,6 +28,8 @@ import {
 } from 'lucide-react';
 import StudentAvatar from '@/components/StudentAvatar';
 import PhotoUploadModal from '@/components/PhotoUploadModal';
+import BarcodeCropModal from '@/components/BarcodeCropModal';
+import { decodeBarcodeFromImageFile } from '@/lib/barcodeDecoder';
 import * as XLSX from 'xlsx';
 
 interface Student {
@@ -69,7 +71,10 @@ export default function StudentsPage() {
   const [studentType, setStudentType] = useState('REGULAR');
   const [barcodeValue, setBarcodeValue] = useState('');
   const [barcodeDecoding, setBarcodeDecoding] = useState(false);
+  const [barcodeDecodingStatus, setBarcodeDecodingStatus] = useState('');
   const [barcodeSuccess, setBarcodeSuccess] = useState<string | null>(null);
+  const [uploadedBarcodeFile, setUploadedBarcodeFile] = useState<File | null>(null);
+  const [isCropModalOpen, setIsCropModalOpen] = useState(false);
 
   // Sorting & Pagination States
   const [sortField, setSortField] = useState<'registerNumber' | 'studentName' | 'department' | 'percentage'>('registerNumber');
@@ -141,48 +146,29 @@ export default function StudentsPage() {
     const file = e.target.files?.[0];
     if (!file) return;
 
+    setUploadedBarcodeFile(file);
     setBarcodeDecoding(true);
+    setBarcodeDecodingStatus('Reading barcode...');
     setModalError(null);
     setBarcodeSuccess(null);
 
     try {
-      const { BrowserMultiFormatReader } = await import('@zxing/library');
-      const codeReader = new BrowserMultiFormatReader();
-      const imageUrl = URL.createObjectURL(file);
-      
-      try {
-        const result = await codeReader.decodeFromImageUrl(imageUrl);
-        if (result && result.getText()) {
-          const decoded = result.getText().trim();
-          setBarcodeValue(decoded);
-          setBarcodeSuccess(`Barcode detected & decoded: ${decoded}`);
-          URL.revokeObjectURL(imageUrl);
-          setBarcodeDecoding(false);
-          return;
-        }
-      } catch (err) {
-        // Try fallback via html5-qrcode
-        try {
-          const { Html5Qrcode } = await import('html5-qrcode');
-          const html5QrCode = new Html5Qrcode('barcode-file-temp-element');
-          const decodedText = await html5QrCode.scanFile(file, true);
-          if (decodedText) {
-            setBarcodeValue(decodedText.trim());
-            setBarcodeSuccess(`Barcode detected & decoded: ${decodedText.trim()}`);
-            URL.revokeObjectURL(imageUrl);
-            setBarcodeDecoding(false);
-            return;
-          }
-        } catch (innerErr) {
-          // Failed both
-        }
-        URL.revokeObjectURL(imageUrl);
-      }
+      const res = await decodeBarcodeFromImageFile(file, (status) => {
+        setBarcodeDecodingStatus(status);
+      });
 
-      setModalError('No barcode could be detected in the uploaded image. Please upload a clear photo of the ID card barcode or enter the barcode value manually.');
+      if (res.success && res.barcodeValue) {
+        setBarcodeValue(res.barcodeValue);
+        setBarcodeSuccess(`Barcode detected: ${res.barcodeValue}`);
+        setModalError(null);
+      } else {
+        setModalError(res.error || 'Barcode not detected automatically. Crop the barcode area and try again.');
+        setIsCropModalOpen(true);
+      }
     } catch (err) {
       console.error('Barcode decoding error:', err);
-      setModalError('Failed to process barcode image.');
+      setModalError('Barcode not detected automatically. Crop the barcode area and try again.');
+      setIsCropModalOpen(true);
     } finally {
       setBarcodeDecoding(false);
       e.target.value = '';
@@ -750,7 +736,7 @@ export default function StudentsPage() {
                 {barcodeDecoding && (
                   <p className="text-[11px] text-indigo-400 flex items-center gap-1.5 font-bold">
                     <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                    Decoding barcode from uploaded photo...
+                    <span>{barcodeDecodingStatus || 'Reading barcode...'}</span>
                   </p>
                 )}
 
@@ -759,7 +745,16 @@ export default function StudentsPage() {
                     ✓ {barcodeSuccess}
                   </p>
                 )}
-                <div id="barcode-file-temp-element" style={{ display: 'none' }} />
+
+                {uploadedBarcodeFile && !barcodeDecoding && (
+                  <button
+                    type="button"
+                    onClick={() => setIsCropModalOpen(true)}
+                    className="text-[11px] font-bold text-indigo-400 hover:text-indigo-300 underline cursor-pointer flex items-center gap-1 mt-1"
+                  >
+                    <span>Crop / Select Barcode Region & Retry</span>
+                  </button>
+                )}
               </div>
 
               <div className="pt-2 flex gap-3">
@@ -833,6 +828,17 @@ export default function StudentsPage() {
           }}
         />
       )}
+      {/* Crop Barcode Modal Fallback */}
+      <BarcodeCropModal
+        isOpen={isCropModalOpen}
+        onClose={() => setIsCropModalOpen(false)}
+        imageFile={uploadedBarcodeFile}
+        onBarcodeDecoded={(decodedVal) => {
+          setBarcodeValue(decodedVal);
+          setBarcodeSuccess(`Barcode detected: ${decodedVal}`);
+          setModalError(null);
+        }}
+      />
     </div>
   );
 }

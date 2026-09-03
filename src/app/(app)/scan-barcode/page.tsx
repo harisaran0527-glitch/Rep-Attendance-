@@ -19,6 +19,8 @@ import {
   Save,
 } from 'lucide-react';
 import StudentAvatar from '@/components/StudentAvatar';
+import BarcodeCropModal from '@/components/BarcodeCropModal';
+import { decodeBarcodeFromImageFile } from '@/lib/barcodeDecoder';
 
 interface StudentInfo {
   id: number;
@@ -51,6 +53,9 @@ export default function ScanBarcodePage() {
   const [cameraError, setCameraError] = useState<string | null>(null);
   const [lookupLoading, setLookupLoading] = useState(false);
   const [scanError, setScanError] = useState<string | null>(null);
+  const [uploadedFile, setUploadedFile] = useState<File | null>(null);
+  const [isCropModalOpen, setIsCropModalOpen] = useState(false);
+  const [uploadStatus, setUploadStatus] = useState<string>('');
 
   // Scanned Student & Materials State
   const [student, setStudent] = useState<StudentInfo | null>(null);
@@ -144,41 +149,26 @@ export default function ScanBarcodePage() {
     const file = e.target.files?.[0];
     if (!file) return;
 
+    setUploadedFile(file);
     setLookupLoading(true);
     setScanError(null);
+    setUploadStatus('Reading barcode...');
 
     try {
-      const { BrowserMultiFormatReader } = await import('@zxing/library');
-      const codeReader = new BrowserMultiFormatReader();
-      const imageUrl = URL.createObjectURL(file);
+      const res = await decodeBarcodeFromImageFile(file, (status) => {
+        setUploadStatus(status);
+      });
 
-      try {
-        const result = await codeReader.decodeFromImageUrl(imageUrl);
-        if (result && result.getText()) {
-          const decoded = result.getText().trim();
-          URL.revokeObjectURL(imageUrl);
-          await handleProcessBarcode(decoded);
-          return;
-        }
-      } catch (err) {
-        try {
-          const { Html5Qrcode } = await import('html5-qrcode');
-          const html5QrCode = new Html5Qrcode('barcode-reader-view-hidden');
-          const decodedText = await html5QrCode.scanFile(file, true);
-          if (decodedText) {
-            URL.revokeObjectURL(imageUrl);
-            await handleProcessBarcode(decodedText.trim());
-            return;
-          }
-        } catch (innerErr) {
-          // both failed
-        }
-        URL.revokeObjectURL(imageUrl);
+      if (res.success && res.barcodeValue) {
+        await handleProcessBarcode(res.barcodeValue);
+      } else {
+        setScanError(res.error || 'Barcode not detected automatically. Crop the barcode area and try again.');
+        setIsCropModalOpen(true);
       }
-
-      setScanError('No barcode detected in the uploaded image. Please ensure the barcode on the ID card is clear and well-lit.');
     } catch (err) {
-      setScanError('Error processing image file.');
+      console.error('File scan error:', err);
+      setScanError('Barcode not detected automatically. Crop the barcode area and try again.');
+      setIsCropModalOpen(true);
     } finally {
       setLookupLoading(false);
       e.target.value = '';
@@ -415,12 +405,21 @@ export default function ScanBarcodePage() {
                 <span>Select Image File</span>
                 <input
                   type="file"
-                  accept="image/*"
+                  accept="image/jpeg,image/jpg,image/png,image/webp"
                   className="hidden"
                   onChange={handleFileUpload}
                 />
               </label>
-              <div id="barcode-reader-view-hidden" style={{ display: 'none' }} />
+
+              {uploadedFile && (
+                <button
+                  type="button"
+                  onClick={() => setIsCropModalOpen(true)}
+                  className="text-xs font-bold text-indigo-400 hover:text-indigo-300 underline cursor-pointer mt-2"
+                >
+                  Crop Barcode Area & Retry Scan
+                </button>
+              )}
             </div>
           )}
 
@@ -586,6 +585,19 @@ export default function ScanBarcodePage() {
           </div>
         </div>
       )}
+      {/* Barcode Crop Modal Fallback */}
+      <BarcodeCropModal
+        isOpen={isCropModalOpen}
+        onClose={() => setIsCropModalOpen(false)}
+        imageFile={uploadedFile}
+        onBarcodeDecoded={(decodedVal) => {
+          handleProcessBarcode(decodedVal);
+        }}
+        onSwitchToManual={() => {
+          setActiveTab('manual');
+          setScanError(null);
+        }}
+      />
     </div>
   );
 }
