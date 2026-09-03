@@ -38,8 +38,6 @@ export default async function StudentDashboardPage() {
         monthlyStats={monthlyStats}
         materials={fullDataRes.materials || []}
         marks={fullDataRes.marks || []}
-        academicRecords={fullDataRes.academicRecords || []}
-        cgpa={fullDataRes.cgpa || 0}
       />
     );
   } catch (error) {

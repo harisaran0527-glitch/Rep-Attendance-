@@ -49,9 +49,6 @@ import {
   saveStudentMaterial,
   getStudentExamMarks,
   saveStudentExamMark,
-  getStudentAcademicRecords,
-  saveSemesterAcademicRecord,
-  calculateStudentCGPA
 } from '@/lib/db-api';
 import { sendLowAttendanceEmail } from '@/lib/email';
 import { runMonthlyWarningEmailJob, MonthlyWarningJobOptions } from '@/lib/monthly-scheduler';
@@ -1432,127 +1429,7 @@ export async function saveStudentMarksAction(
   }
 }
 
-// ==========================================
-// CGPA & ACADEMIC RECORDS ACTIONS
-// ==========================================
 
-export async function getAllStudentsWithCGPAAction() {
-  if (!(await isStaffAuthenticated())) {
-    throw new Error('Unauthorized');
-  }
-
-  try {
-    const students = await dbGetAllStudents();
-    const results = await Promise.all(
-      students.map(async (student) => {
-        const cgpa = await calculateStudentCGPA(student.id);
-        return {
-          ...student,
-          cgpa,
-        };
-      })
-    );
-    return { success: true, data: results };
-  } catch (error) {
-    console.error('Error fetching students with CGPA:', error);
-    return { success: false, error: 'Failed to load CGPA records.' };
-  }
-}
-
-export async function getStudentAcademicRecordsAction(studentId: number) {
-  if (!(await isStaffAuthenticated())) {
-    throw new Error('Unauthorized');
-  }
-
-  try {
-    const student = await dbGetAllStudents().then((list) => list.find((s) => s.id === studentId));
-    if (!student) {
-      return { success: false, error: 'Student not found.' };
-    }
-
-    const records = await getStudentAcademicRecords(studentId);
-    const cgpa = await calculateStudentCGPA(studentId);
-
-    return {
-      success: true,
-      student: {
-        id: student.id,
-        studentName: student.studentName,
-        registerNumber: student.registerNumber,
-        department: student.department,
-        year: student.year,
-        section: student.section,
-        profilePhotoUrl: student.profilePhotoUrl,
-      },
-      records,
-      cgpa,
-    };
-  } catch (error) {
-    console.error('Error fetching student academic records:', error);
-    return { success: false, error: 'Failed to load academic records.' };
-  }
-}
-
-export async function saveStudentAcademicRecordAction(
-  studentId: number,
-  semester: number,
-  recordData: {
-    sgpa: number;
-    totalCredits: number;
-    creditsEarned: number;
-    arrearsCount: number;
-    arrearsCleared: number;
-  }
-) {
-  if (!(await isStaffAuthenticated())) {
-    throw new Error('Unauthorized');
-  }
-
-  if (semester < 1 || semester > 8) {
-    return { success: false, error: 'Semester must be between 1 and 8.' };
-  }
-
-  const sgpa = Number(recordData.sgpa);
-  const totalCredits = Number(recordData.totalCredits);
-  const creditsEarned = Number(recordData.creditsEarned);
-  const arrearsCount = Number(recordData.arrearsCount);
-  const arrearsCleared = Number(recordData.arrearsCleared);
-
-  if (isNaN(sgpa) || sgpa < 0 || sgpa > 10) {
-    return { success: false, error: 'SGPA must be between 0.00 and 10.00.' };
-  }
-  if (isNaN(totalCredits) || totalCredits < 0) {
-    return { success: false, error: 'Total credits must be >= 0.' };
-  }
-  if (isNaN(creditsEarned) || creditsEarned < 0 || creditsEarned > totalCredits) {
-    return { success: false, error: 'Credits earned must be between 0 and total credits.' };
-  }
-  if (isNaN(arrearsCount) || arrearsCount < 0) {
-    return { success: false, error: 'Arrears count must be >= 0.' };
-  }
-  if (isNaN(arrearsCleared) || arrearsCleared < 0) {
-    return { success: false, error: 'Arrears cleared must be >= 0.' };
-  }
-
-  try {
-    await saveSemesterAcademicRecord(studentId, semester, {
-      sgpa,
-      totalCredits,
-      creditsEarned,
-      arrearsCount,
-      arrearsCleared,
-    });
-
-    const updatedCGPA = await calculateStudentCGPA(studentId);
-    revalidatePath(`/cgpa/${studentId}`);
-    revalidatePath('/cgpa');
-
-    return { success: true, cgpa: updatedCGPA };
-  } catch (error) {
-    console.error('Error saving academic record:', error);
-    return { success: false, error: 'Failed to save academic record.' };
-  }
-}
 
 // ==========================================
 // STUDENT PORTAL UNIFIED FULL DATA ACTION
@@ -1567,24 +1444,18 @@ export async function getStudentPortalFullDataAction() {
   const studentId = session.studentId;
 
   try {
-    const [materials, marks, academicRecords, cgpa] = await Promise.all([
+    const [materials, marks] = await Promise.all([
       getStudentMaterials(studentId),
       getStudentExamMarks(studentId),
-      getStudentAcademicRecords(studentId),
-      calculateStudentCGPA(studentId),
     ]);
 
     return {
       success: true,
       materials,
       marks,
-      academicRecords,
-      cgpa,
     };
   } catch (error) {
     console.error('Error loading student portal full data:', error);
     return { success: false, error: 'Failed to load portal records.' };
   }
 }
-
-

@@ -4,7 +4,6 @@ import { useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import { studentLogoutAction } from '@/app/actions';
 import {
-  GraduationCap,
   LogOut,
   Calendar as CalendarIcon,
   CheckCircle2,
@@ -80,16 +79,6 @@ interface ExamMarkItem {
   totalMarks: number;
 }
 
-interface SemesterRecordItem {
-  id?: number;
-  semester: number;
-  sgpa: number;
-  totalCredits: number;
-  creditsEarned: number;
-  arrearsCount: number;
-  arrearsCleared: number;
-}
-
 interface StudentDashboardClientProps {
   student: StudentData;
   stats: StatsData;
@@ -98,8 +87,6 @@ interface StudentDashboardClientProps {
   monthlyStats: MonthlyStat[];
   materials?: MaterialItem[];
   marks?: ExamMarkItem[];
-  academicRecords?: SemesterRecordItem[];
-  cgpa?: number;
 }
 
 export default function StudentDashboardClient({
@@ -110,13 +97,11 @@ export default function StudentDashboardClient({
   monthlyStats,
   materials = [],
   marks = [],
-  academicRecords = [],
-  cgpa = 0,
 }: StudentDashboardClientProps) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
 
-  const [activeTab, setActiveTab] = useState<'overview' | 'calendar' | 'marks' | 'materials' | 'academic'>('overview');
+  const [activeTab, setActiveTab] = useState<'overview' | 'calendar' | 'marks' | 'materials'>('overview');
   const [selectedExamCategory, setSelectedExamCategory] = useState<'CIA 1' | 'CIA 2' | 'Model Exam'>('CIA 1');
 
   // Calendar State
@@ -455,14 +440,6 @@ export default function StudentDashboardClient({
           >
             My College Materials
           </button>
-          <button
-            onClick={() => setActiveTab('academic')}
-            className={`px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
-              activeTab === 'academic' ? 'btn-gradient shadow-md' : 'text-slate-400 light:text-slate-700 hover:text-slate-200'
-            }`}
-          >
-            My Academic Record
-          </button>
         </div>
 
         {/* Tab Content 1: Monthly Progress */}
@@ -594,54 +571,6 @@ export default function StudentDashboardClient({
           </div>
         )}
 
-        {/* Tab Content 4: Academic Record View-Only */}
-        {activeTab === 'academic' && (
-          <div className="glass-card p-6 rounded-3xl space-y-6">
-            <div className="flex items-center justify-between border-b border-slate-800 light:border-slate-200 pb-4">
-              <div className="flex items-center gap-3">
-                <GraduationCap className="w-6 h-6 text-indigo-400" />
-                <div>
-                  <h3 className="text-base font-bold text-slate-100 light:text-slate-900">My Academic Record</h3>
-                  <p className="text-xs text-slate-400 light:text-slate-600">Official semester SGPA, credits, and cumulative CGPA.</p>
-                </div>
-              </div>
-
-              <div className="px-4 py-2 bg-indigo-600/20 border border-indigo-500/30 rounded-2xl text-right">
-                <span className="block text-[10px] uppercase font-extrabold text-slate-400">Current CGPA</span>
-                <span className="text-xl font-black text-indigo-400 light:text-indigo-600">{cgpa.toFixed(2)}</span>
-              </div>
-            </div>
-
-            {academicRecords.length === 0 ? (
-              <div className="py-12 text-center text-slate-500 text-xs font-medium">
-                No official semester records entered yet.
-              </div>
-            ) : (
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                {academicRecords.map((r, idx) => (
-                  <div
-                    key={idx}
-                    className="p-5 bg-slate-950/50 light:bg-slate-100 border border-slate-800 light:border-slate-200 rounded-2xl space-y-3"
-                  >
-                    <div className="flex items-center justify-between border-b border-slate-800/80 light:border-slate-200 pb-2">
-                      <span className="text-xs font-extrabold text-slate-200 light:text-slate-900">Semester {r.semester}</span>
-                      <span className="px-2.5 py-0.5 rounded-full text-xs font-black bg-indigo-500/15 text-indigo-400 border border-indigo-500/30">
-                        SGPA: {r.sgpa.toFixed(2)}
-                      </span>
-                    </div>
-
-                    <div className="grid grid-cols-2 gap-2 text-xs font-medium text-slate-400 light:text-slate-600">
-                      <p>Total Credits: <span className="font-bold text-slate-200 light:text-slate-800">{r.totalCredits}</span></p>
-                      <p>Earned Credits: <span className="font-bold text-slate-200 light:text-slate-800">{r.creditsEarned}</span></p>
-                      <p>Arrears: <span className="font-bold text-rose-400">{r.arrearsCount}</span></p>
-                      <p>Arrears Cleared: <span className="font-bold text-emerald-400">{r.arrearsCleared}</span></p>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-        )}
 
         {/* Tab Content 2: Calendar */}
         {activeTab === 'calendar' && (
