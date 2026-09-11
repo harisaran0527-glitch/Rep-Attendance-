@@ -73,6 +73,7 @@ interface MaterialItem {
 
 interface ExamMarkItem {
   id?: number;
+  semester?: number;
   examCategory: string;
   subject: string;
   obtainedMarks: number;
@@ -102,6 +103,7 @@ export default function StudentDashboardClient({
   const [isPending, startTransition] = useTransition();
 
   const [activeTab, setActiveTab] = useState<'overview' | 'calendar' | 'marks' | 'materials'>('overview');
+  const [selectedSemester, setSelectedSemester] = useState<number>(1);
   const [selectedExamCategory, setSelectedExamCategory] = useState<'CIA 1' | 'CIA 2' | 'Model Exam'>('CIA 1');
 
   // Calendar State
@@ -475,22 +477,40 @@ export default function StudentDashboardClient({
         {/* Tab Content 2: Marks View-Only */}
         {activeTab === 'marks' && (
           <div className="glass-card p-6 rounded-3xl space-y-6">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-800 light:border-slate-200 pb-4">
+            <div className="flex flex-col gap-4 border-b border-slate-800 light:border-slate-200 pb-4">
               <div className="flex items-center gap-2">
                 <Award className="w-5 h-5 text-indigo-400" />
                 <div>
-                  <h3 className="text-base font-bold text-slate-100 light:text-slate-900">My Exam Marks</h3>
-                  <p className="text-xs text-slate-400 light:text-slate-600">View-only record of internal exam scores.</p>
+                  <h3 className="text-base font-bold text-slate-100 light:text-slate-900">My Exam Marks (Semester-Wise)</h3>
+                  <p className="text-xs text-slate-400 light:text-slate-600">View-only record of internal exam scores across semesters.</p>
                 </div>
               </div>
 
-              {/* Sub-category selector */}
-              <div className="flex bg-slate-950/60 light:bg-slate-100 p-1 rounded-xl border border-slate-800 light:border-slate-200">
+              {/* Semester selector */}
+              <div className="flex items-center gap-1.5 overflow-x-auto custom-scrollbar pb-1">
+                <span className="text-xs font-bold text-slate-400 light:text-slate-600 mr-1 shrink-0">Semester:</span>
+                {[1, 2, 3, 4, 5, 6, 7, 8].map((sem) => (
+                  <button
+                    key={sem}
+                    onClick={() => setSelectedSemester(sem)}
+                    className={`px-3 py-1.5 text-xs font-extrabold rounded-xl transition cursor-pointer shrink-0 ${
+                      selectedSemester === sem
+                        ? 'bg-indigo-600 text-white shadow-md'
+                        : 'bg-slate-900 light:bg-slate-200 text-slate-400 light:text-slate-700 hover:text-white'
+                    }`}
+                  >
+                    Sem {sem}
+                  </button>
+                ))}
+              </div>
+
+              {/* Category selector inside selected semester */}
+              <div className="flex bg-slate-950/60 light:bg-slate-100 p-1 rounded-xl border border-slate-800 light:border-slate-200 max-w-xs">
                 {(['CIA 1', 'CIA 2', 'Model Exam'] as const).map((cat) => (
                   <button
                     key={cat}
                     onClick={() => setSelectedExamCategory(cat)}
-                    className={`px-3 py-1.5 text-xs font-bold rounded-lg transition ${
+                    className={`flex-1 py-1.5 text-xs font-bold rounded-lg transition cursor-pointer ${
                       selectedExamCategory === cat
                         ? 'bg-indigo-600 text-white shadow-sm'
                         : 'text-slate-400 light:text-slate-600'
@@ -503,11 +523,13 @@ export default function StudentDashboardClient({
             </div>
 
             {(() => {
-              const categoryMarks = marks.filter((m) => m.examCategory === selectedExamCategory);
+              const categoryMarks = marks.filter(
+                (m) => (m.semester || 1) === selectedSemester && m.examCategory === selectedExamCategory
+              );
               if (categoryMarks.length === 0) {
                 return (
                   <div className="py-12 text-center text-slate-500 text-xs font-medium">
-                    No marks uploaded yet for {selectedExamCategory}.
+                    No marks uploaded yet for Semester {selectedSemester} ({selectedExamCategory}).
                   </div>
                 );
               }

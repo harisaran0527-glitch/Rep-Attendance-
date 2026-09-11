@@ -666,24 +666,29 @@ export async function saveStudentMaterial(studentId: number, materialName: strin
 // EXAM MARKS API
 // ==========================================
 
-export async function getStudentExamMarks(studentId: number, examCategory?: string) {
+export async function getStudentExamMarks(studentId: number, semester?: number, examCategory?: string) {
   const whereClause: any = { studentId };
+  if (semester && semester >= 1 && semester <= 8) {
+    whereClause.semester = Number(semester);
+  }
   if (examCategory) {
     whereClause.examCategory = examCategory.trim();
   }
   return prisma.examMark.findMany({
     where: whereClause,
-    orderBy: { subject: 'asc' },
+    orderBy: [{ semester: 'asc' }, { subject: 'asc' }],
   });
 }
 
 export async function saveStudentExamMark(
   studentId: number,
+  semester: number,
   examCategory: string,
   subject: string,
   obtainedMarks: number,
-  totalMarks: number
+  totalMarks: number = 100
 ) {
+  const sem = Math.max(1, Math.min(8, Number(semester) || 1));
   const category = examCategory.trim();
   const sub = subject.trim();
   const isStandardExam = ['CIA 1', 'CIA 2', 'Model Exam'].includes(category);
@@ -691,8 +696,9 @@ export async function saveStudentExamMark(
 
   return prisma.examMark.upsert({
     where: {
-      studentId_examCategory_subject: {
+      studentId_semester_examCategory_subject: {
         studentId,
+        semester: sem,
         examCategory: category,
         subject: sub,
       },
@@ -703,6 +709,7 @@ export async function saveStudentExamMark(
     },
     create: {
       studentId,
+      semester: sem,
       examCategory: category,
       subject: sub,
       obtainedMarks,

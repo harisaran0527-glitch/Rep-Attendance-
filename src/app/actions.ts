@@ -1444,7 +1444,7 @@ export async function saveStudentMaterialsAction(
 // MARKS ACTIONS
 // ==========================================
 
-export async function getStudentMarksAction(studentId: number) {
+export async function getStudentMarksAction(studentId: number, semester?: number) {
   if (!(await isStaffAuthenticated())) {
     throw new Error('Unauthorized');
   }
@@ -1455,7 +1455,7 @@ export async function getStudentMarksAction(studentId: number) {
       return { success: false, error: 'Student not found.' };
     }
 
-    const marks = await getStudentExamMarks(studentId);
+    const marks = await getStudentExamMarks(studentId, semester);
 
     return {
       success: true,
@@ -1478,11 +1478,17 @@ export async function getStudentMarksAction(studentId: number) {
 
 export async function saveStudentMarksAction(
   studentId: number,
+  semester: number,
   examCategory: string,
-  marksList: { subject: string; obtainedMarks: number; totalMarks: number }[]
+  marksList: { subject: string; obtainedMarks: number; totalMarks?: number }[]
 ) {
   if (!(await isStaffAuthenticated())) {
     throw new Error('Unauthorized');
+  }
+
+  const sem = Number(semester) || 1;
+  if (sem < 1 || sem > 8) {
+    return { success: false, error: 'Semester must be between 1 and 8.' };
   }
 
   if (!studentId || !examCategory || !Array.isArray(marksList)) {
@@ -1495,7 +1501,7 @@ export async function saveStudentMarksAction(
   // Validate all marks server-side
   for (const item of marksList) {
     const obtained = Number(item.obtainedMarks);
-    const total = isStandardExam ? 100 : Number(item.totalMarks);
+    const total = isStandardExam ? 100 : Number(item.totalMarks || 100);
 
     if (isNaN(obtained) || obtained < 0) {
       return { success: false, error: `Obtained marks for ${item.subject} must be >= 0.` };
@@ -1513,9 +1519,10 @@ export async function saveStudentMarksAction(
 
   try {
     for (const item of marksList) {
-      const totalToSave = isStandardExam ? 100 : Number(item.totalMarks);
+      const totalToSave = isStandardExam ? 100 : Number(item.totalMarks || 100);
       await saveStudentExamMark(
         studentId,
+        sem,
         category,
         item.subject,
         Number(item.obtainedMarks),

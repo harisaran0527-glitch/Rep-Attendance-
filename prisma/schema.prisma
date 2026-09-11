@@ -85,6 +85,7 @@ model CollegeMaterial {
 model ExamMark {
   id            Int      @id @default(autoincrement())
   studentId     Int
+  semester      Int      @default(1)
   examCategory  String   // "CIA 1", "CIA 2", "Model Exam"
   subject       String
   obtainedMarks Float
@@ -94,8 +95,8 @@ model ExamMark {
 
   student Student @relation(fields: [studentId], references: [id], onDelete: Cascade)
 
-  @@unique([studentId, examCategory, subject])
-  @@index([studentId, examCategory])
+  @@unique([studentId, semester, examCategory, subject])
+  @@index([studentId, semester, examCategory])
 }
 
 model SemesterAcademicRecord {

@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { getAllStudentsWithStats } from '@/app/actions';
-import { Search, Loader2, Award, ChevronRight, Users } from 'lucide-react';
+import { Search, Loader2, Award, ChevronRight, Users, BookOpen } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import { generateMarksWorkbook } from '@/lib/marksExport';
 import StudentAvatar from '@/components/StudentAvatar';
@@ -22,13 +22,15 @@ interface Student {
 export default function MarksPage() {
   const [students, setStudents] = useState<Student[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
+  const [selectedSemester, setSelectedSemester] = useState<number | 'ALL'>('ALL');
   const [exporting, setExporting] = useState(false);
+  const [loading, setLoading] = useState(true);
 
   // Export to Excel
   const handleExport = async () => {
     try {
       setExporting(true);
-      const { workbook, fileName } = await generateMarksWorkbook(searchQuery);
+      const { workbook, fileName } = await generateMarksWorkbook(searchQuery, selectedSemester);
       const buffer = XLSX.write(workbook, { bookType: 'xlsx', type: 'array' });
       const blob = new Blob([buffer], {
         type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
@@ -49,7 +51,7 @@ export default function MarksPage() {
   const handleShare = async () => {
     try {
       setExporting(true);
-      const { workbook, fileName } = await generateMarksWorkbook(searchQuery);
+      const { workbook, fileName } = await generateMarksWorkbook(searchQuery, selectedSemester);
       const buffer = XLSX.write(workbook, { bookType: 'xlsx', type: 'array' });
       const blob = new Blob([buffer], {
         type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
@@ -78,7 +80,6 @@ export default function MarksPage() {
       setExporting(false);
     }
   };
-  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     async function fetchStudents() {
@@ -113,10 +114,10 @@ export default function MarksPage() {
         <div>
           <h2 className="text-xl font-extrabold text-slate-100 light:text-slate-900 tracking-tight flex items-center gap-2">
             <Award className="w-6 h-6 text-indigo-400" />
-            <span>Internal Exam Marks Management</span>
+            <span>Semester-Wise Marks Management</span>
           </h2>
           <p className="text-xs text-slate-400 light:text-slate-600 mt-1">
-            Manage subject marks for CIA 1, CIA 2, and Model Exams across all enrolled students.
+            Manage subject marks for CIA 1, CIA 2, and Model Exams across Semesters 1 to 8.
           </p>
         </div>
         <div className="flex items-center gap-2 mt-2">
@@ -137,16 +138,53 @@ export default function MarksPage() {
         </div>
       </div>
 
-      {/* Search Bar */}
-      <div className="relative flex-1 max-w-md">
-        <Search className="h-4 w-4 text-slate-500 absolute left-3.5 top-3 pointer-events-none" />
-        <input
-          type="text"
-          placeholder="Search student by name or register number..."
-          value={searchQuery}
-          onChange={(e) => setSearchQuery(e.target.value)}
-          className="block w-full pl-10 pr-4 py-2.5 bg-slate-950/50 light:bg-slate-100 border border-slate-700/50 light:border-slate-300 rounded-xl text-slate-100 light:text-slate-900 placeholder-slate-500 text-xs focus:outline-none focus:ring-2 focus:ring-indigo-500 transition font-medium"
-        />
+      {/* Semester & Search Controls */}
+      <div className="glass-card p-4 rounded-2xl border border-slate-800 light:border-slate-200 shadow-md space-y-4">
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+          {/* Semester Selector Tabs */}
+          <div className="flex items-center gap-1 overflow-x-auto custom-scrollbar pb-1">
+            <span className="text-xs font-bold text-slate-400 light:text-slate-600 mr-2 flex items-center gap-1 shrink-0">
+              <BookOpen className="w-4 h-4 text-indigo-400" />
+              Semester:
+            </span>
+            <button
+              onClick={() => setSelectedSemester('ALL')}
+              className={`px-3 py-1.5 text-xs font-bold rounded-xl shrink-0 transition ${
+                selectedSemester === 'ALL'
+                  ? 'bg-indigo-600 text-white shadow-md'
+                  : 'bg-slate-900 light:bg-slate-200 text-slate-400 light:text-slate-700 hover:text-white'
+              }`}
+            >
+              All Semesters
+            </button>
+
+            {[1, 2, 3, 4, 5, 6, 7, 8].map((sem) => (
+              <button
+                key={sem}
+                onClick={() => setSelectedSemester(sem)}
+                className={`px-3 py-1.5 text-xs font-bold rounded-xl shrink-0 transition ${
+                  selectedSemester === sem
+                    ? 'bg-indigo-600 text-white shadow-md'
+                    : 'bg-slate-900 light:bg-slate-200 text-slate-400 light:text-slate-700 hover:text-white'
+                }`}
+              >
+                Sem {sem}
+              </button>
+            ))}
+          </div>
+
+          {/* Search Bar */}
+          <div className="relative flex-1 max-w-md">
+            <Search className="h-4 w-4 text-slate-500 absolute left-3.5 top-3 pointer-events-none" />
+            <input
+              type="text"
+              placeholder="Search student by name or register number..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="block w-full pl-10 pr-4 py-2 bg-slate-950/50 light:bg-slate-100 border border-slate-700/50 light:border-slate-300 rounded-xl text-slate-100 light:text-slate-900 placeholder-slate-500 text-xs focus:outline-none focus:ring-2 focus:ring-indigo-500 transition font-medium"
+            />
+          </div>
+        </div>
       </div>
 
       {/* Student List Grid / Table */}
@@ -202,7 +240,7 @@ export default function MarksPage() {
                     </td>
                     <td className="px-6 py-4 text-right">
                       <Link
-                        href={`/marks/${student.id}`}
+                        href={`/marks/${student.id}${selectedSemester !== 'ALL' ? `?semester=${selectedSemester}` : ''}`}
                         className="inline-flex items-center gap-1.5 px-3.5 py-2 btn-gradient text-white font-bold rounded-xl text-xs shadow-md shadow-indigo-600/20 hover:scale-105 transition cursor-pointer"
                       >
                         <span>View / Edit Marks</span>
