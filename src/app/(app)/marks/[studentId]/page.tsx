@@ -86,13 +86,15 @@ export default function StudentMarksPage({ params }: { params: Promise<{ student
           const newMarksMap: Record<string, MarkEntry[]> = {};
 
           EXAM_CATEGORIES.forEach((cat) => {
-            const defaultTotal = cat === 'Model Exam' ? 100 : 50;
+            const defaultTotal = 100; // All exams out of 100
+            const isStandardExam = ['CIA 1', 'CIA 2', 'Model Exam'].includes(cat);
+
             const entries: MarkEntry[] = DEFAULT_SUBJECTS.map((sub) => {
               const existing = dbMap[cat]?.[sub];
               return {
                 subject: sub,
                 obtainedMarks: existing ? existing.obtained : 0,
-                totalMarks: existing ? existing.total : defaultTotal,
+                totalMarks: isStandardExam ? 100 : (existing ? existing.total : defaultTotal),
               };
             });
 
@@ -103,7 +105,7 @@ export default function StudentMarksPage({ params }: { params: Promise<{ student
                   entries.push({
                     subject: sub,
                     obtainedMarks: dbMap[cat][sub].obtained,
-                    totalMarks: dbMap[cat][sub].total,
+                    totalMarks: isStandardExam ? 100 : dbMap[cat][sub].total,
                   });
                 }
               });
@@ -135,9 +137,11 @@ export default function StudentMarksPage({ params }: { params: Promise<{ student
 
     setAllMarksMap((prev) => {
       const list = [...(prev[activeCategory] || [])];
+      const isStandardExam = ['CIA 1', 'CIA 2', 'Model Exam'].includes(activeCategory);
       list[index] = {
         ...list[index],
         [field]: val,
+        totalMarks: isStandardExam ? 100 : (field === 'totalMarks' ? val : list[index].totalMarks),
       };
       return {
         ...prev,
@@ -150,7 +154,7 @@ export default function StudentMarksPage({ params }: { params: Promise<{ student
     const name = prompt('Enter custom subject name:');
     if (name && name.trim()) {
       const cleanName = name.trim();
-      const defaultTotal = activeCategory === 'Model Exam' ? 100 : 50;
+      const defaultTotal = 100;
       setAllMarksMap((prev) => {
         const list = [...(prev[activeCategory] || [])];
         if (!list.some((item) => item.subject.toLowerCase() === cleanName.toLowerCase())) {
@@ -183,13 +187,15 @@ export default function StudentMarksPage({ params }: { params: Promise<{ student
     setError(null);
     setSuccessMsg(null);
 
+    const isStandardExam = ['CIA 1', 'CIA 2', 'Model Exam'].includes(activeCategory);
+
     // Validate entries before saving
     for (const item of currentEntries) {
       const obtained = parseFloat(String(item.obtainedMarks));
-      const total = parseFloat(String(item.totalMarks));
+      const total = isStandardExam ? 100 : parseFloat(String(item.totalMarks));
 
-      if (isNaN(obtained) || obtained < 0) {
-        setError(`Obtained marks for "${item.subject}" must be a valid number >= 0.`);
+      if (isNaN(obtained) || obtained < 0 || (isStandardExam && obtained > 100)) {
+        setError(`Obtained marks for "${item.subject}" must be a valid number between 0 and 100.`);
         return;
       }
       if (isNaN(total) || total <= 0) {
@@ -208,7 +214,7 @@ export default function StudentMarksPage({ params }: { params: Promise<{ student
       const payload = currentEntries.map((item) => ({
         subject: item.subject,
         obtainedMarks: parseFloat(String(item.obtainedMarks)),
-        totalMarks: parseFloat(String(item.totalMarks)),
+        totalMarks: isStandardExam ? 100 : parseFloat(String(item.totalMarks)),
       }));
 
       const res = await saveStudentMarksAction(student.id, activeCategory, payload);
@@ -376,8 +382,8 @@ export default function StudentMarksPage({ params }: { params: Promise<{ student
                         step="1"
                         min="1"
                         value={item.totalMarks}
-                        onChange={(e) => handleMarkChange(idx, 'totalMarks', e.target.value)}
-                        className="w-24 px-3 py-1.5 bg-slate-900 light:bg-white border border-slate-700 light:border-slate-300 rounded-xl text-slate-100 light:text-slate-900 text-xs font-bold text-center focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                        readOnly
+                        className="w-24 px-3 py-1.5 bg-slate-900 light:bg-white border border-slate-700 light:border-slate-300 rounded-xl text-slate-100 light:text-slate-900 text-xs font-bold text-center focus:outline-none focus:ring-2 focus:ring-indigo-500 opacity-50 cursor-not-allowed"
                       />
                     </div>
                   </div>

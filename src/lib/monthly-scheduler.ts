@@ -176,11 +176,58 @@ export async function runMonthlyWarningEmailJob(
   const failedList: Array<{ studentId: number; registerNumber: string; studentName: string; error: string }> = [];
 
   for (const student of studentsToWarn) {
-    const stats = batchStats.getStudentStats(student.id);
+    // Foreign Key Safety: Verify student exists in DB by primary key before attempting log creation
+    const dbStudent = await prisma.student.findUnique({
+      where: { id: student.id },
+      select: { id: true, studentName: true, registerNumber: true, email: true },
+    });
+
+    if (!dbStudent) {
+      console.warn(`[WARNING] Student ID ${student.id} no longer exists in DB. Skipping EmailLog creation.`);
+      failedList.push({
+        studentId: student.id,
+        registerNumber: student.registerNumber,
+        studentName: student.studentName,
+        error: 'Student record not found in database (Foreign key check failed)',
+      });
+      continue;
+    }
+
+    const stats = batchStats.getStudentStats(dbStudent.id);
+    const recipientEmail = (dbStudent.email || student.email || '').trim();
+    const trackingToken = crypto.randomUUID();
+    const now = new Date();
+    const alertDateTimeStr = `${targetDateStr} ${now.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true })}`;
+    const subjectText = `Attendance Alert — Your Attendance is Below Required Percentage`;
+
+    // Missing email handling: If student has no email ID, do not attempt to send email.
+    if (!recipientEmail) {
+      console.warn(`[WARNING] Student ${student.registerNumber} (${student.studentName}) has no email ID. Logging as Not Sent.`);
+      await prisma.emailLog.create({
+        data: {
+          studentId: student.id,
+          studentNameSnapshot: student.studentName,
+          registerNumberSnapshot: student.registerNumber,
+          email: 'No Email',
+          recipientEmail: '',
+          percentage: stats.percentage,
+          attendancePercentage: stats.percentage,
+          subject: subjectText,
+          body: 'Not Sent — Student email not available',
+          warningMonth,
+          status: 'Not Sent — No Email',
+          deliveryStatus: 'Not Sent — No Email',
+          opened: false,
+          openedAt: null,
+        },
+      });
+      continue;
+    }
+
     try {
       const emailResult = await sendLowAttendanceEmail({
         studentName: student.studentName,
-        studentEmail: student.email,
+        studentEmail: recipientEmail,
         registerNumber: student.registerNumber,
         department: student.department,
         year: student.year,
@@ -192,49 +239,68 @@ export async function runMonthlyWarningEmailJob(
         absentCount: stats.daysAbsent,
         month: warningMonth,
         warningDate: targetDateStr,
+        alertDateTimeStr,
+        trackingToken,
         smtpSettings: settings,
       });
 
-      const subjectText = `Monthly Attendance Warning – Attendance Below 75%`;
-      const bodyText = `MONTHLY ATTENDANCE WARNING – ATTENDANCE BELOW 75%
+      const bodyText = `ATTENDANCE ALERT — YOUR ATTENDANCE IS BELOW REQUIRED PERCENTAGE
 ${settings.senderName || 'College Attendance Portal'}
 
 Dear ${student.studentName},
 
-This is an official monthly attendance warning notification for ${warningMonth}. Your overall attendance percentage is ${stats.percentage}%, which is strictly below the required minimum of ${threshold}%.
+This is an official low-attendance warning alert. Your current overall attendance percentage is ${stats.percentage}%, which is strictly below the required minimum threshold of ${threshold}%.
 
-Student Details:
+Student Attendance Summary:
 - Name: ${student.studentName}
 - Register Number: ${student.registerNumber}
-- Department: ${student.department}
-- Year: ${student.year}
-- Section: ${student.section}
-- Current Attendance: ${stats.percentage}%
-- Required Minimum: ${threshold}%
-- Total Working Sessions: ${stats.totalDays} Days
-- Days Present (incl. OD): ${stats.daysPresent} Days
-- Days Absent: ${stats.daysAbsent} Days
-- Month: ${warningMonth}
-- Warning Date: ${targetDateStr}
+- Department: ${student.department} (${student.year} Year - ${student.section})
+- Current Attendance Percentage: ${stats.percentage}%
+- Minimum Required Percentage: ${threshold}%
+- Total Sessions: ${stats.totalDays} Days
+- Sessions Attended: ${stats.daysPresent} Days
+- Sessions Absent: ${stats.daysAbsent} Days
+- Alert Date & Time: ${alertDateTimeStr}
 
-Please contact your Class Representative or Department Administration immediately to clarify your attendance status.
+URGENT ACTION REQUIRED:
+Please attend all upcoming classes regularly to improve your attendance percentage above ${threshold}%. Contact your Class Representative or HOD immediately.
 
 Regards,
 ${settings.senderName || 'College Attendance Portal'} Administration`;
 
+      const deliveryStatus = emailResult.status;
+
       await prisma.emailLog.create({
         data: {
           studentId: student.id,
-          email: student.email,
+          studentNameSnapshot: student.studentName,
+          registerNumberSnapshot: student.registerNumber,
+          email: recipientEmail,
+          recipientEmail: recipientEmail,
           percentage: stats.percentage,
+          attendancePercentage: stats.percentage,
           subject: subjectText,
-          body: bodyText,
+          body: emailResult.error ? `${bodyText}\n\n[Delivery Error]: ${emailResult.error}` : bodyText,
           warningMonth,
-          status: emailResult.status === 'Sent' ? 'Sent' : emailResult.status === 'Simulated' ? 'Simulated' : 'Failed',
+          status: deliveryStatus,
+          deliveryStatus,
+          providerMessageId: emailResult.messageId || null,
+          trackingToken,
+          opened: false,
+          openedAt: null,
         },
       });
 
-      emailsSent++;
+      if (deliveryStatus === 'Sent') {
+        emailsSent++;
+      } else {
+        failedList.push({
+          studentId: student.id,
+          registerNumber: student.registerNumber,
+          studentName: student.studentName,
+          error: emailResult.error || deliveryStatus,
+        });
+      }
     } catch (err: any) {
       console.error(`Monthly warning email failed for student ${student.registerNumber}:`, err);
       failedList.push({
@@ -243,7 +309,6 @@ ${settings.senderName || 'College Attendance Portal'} Administration`;
         studentName: student.studentName,
         error: err?.message || 'Email sending failed',
       });
-      // Continue processing remaining students even if one fails
     }
   }
 

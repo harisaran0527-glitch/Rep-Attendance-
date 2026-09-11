@@ -128,13 +128,22 @@ export async function getEmailLogs() {
     select: {
       id: true,
       studentId: true,
+      studentNameSnapshot: true,
+      registerNumberSnapshot: true,
       email: true,
+      recipientEmail: true,
       percentage: true,
+      attendancePercentage: true,
       subject: true,
       body: true,
       warningMonth: true,
       sentAt: true,
       status: true,
+      deliveryStatus: true,
+      providerMessageId: true,
+      trackingToken: true,
+      opened: true,
+      openedAt: true,
       student: {
         select: {
           id: true,
@@ -162,7 +171,26 @@ export async function logSentEmail(data: {
   body: string;
   status: string;
   warningMonth?: string;
+  studentNameSnapshot?: string;
+  registerNumberSnapshot?: string;
+  recipientEmail?: string;
+  deliveryStatus?: string;
+  providerMessageId?: string;
+  trackingToken?: string;
+  opened?: boolean;
+  openedAt?: Date;
 }) {
+  // Foreign Key Safety: Verify student exists in DB before creating record
+  const student = await prisma.student.findUnique({
+    where: { id: data.studentId },
+    select: { id: true },
+  });
+
+  if (!student) {
+    console.warn(`[logSentEmail] Cannot create EmailLog: Student ID ${data.studentId} not found in DB.`);
+    return null;
+  }
+
   return prisma.emailLog.create({
     data,
   });
@@ -658,6 +686,8 @@ export async function saveStudentExamMark(
 ) {
   const category = examCategory.trim();
   const sub = subject.trim();
+  const isStandardExam = ['CIA 1', 'CIA 2', 'Model Exam'].includes(category);
+  const finalTotalMarks = isStandardExam ? 100 : (totalMarks || 100);
 
   return prisma.examMark.upsert({
     where: {
@@ -669,14 +699,14 @@ export async function saveStudentExamMark(
     },
     update: {
       obtainedMarks,
-      totalMarks,
+      totalMarks: finalTotalMarks,
     },
     create: {
       studentId,
       examCategory: category,
       subject: sub,
       obtainedMarks,
-      totalMarks,
+      totalMarks: finalTotalMarks,
     },
   });
 }
@@ -941,3 +971,10 @@ export async function getAllBarcodeScanHistory(filters?: ScanHistoryFilters) {
     orderBy: { scannedAt: 'desc' },
   });
 }
+
+export async function deleteBarcodeScanLog(logId: number) {
+  return prisma.barcodeScanLog.delete({
+    where: { id: logId },
+  });
+}
+

@@ -8,6 +8,7 @@ import {
   getTeachersAction,
   addTeacherAction,
   deleteTeacherAction,
+  triggerMonthlyWarningJobAction,
 } from '@/app/actions';
 import {
   Settings,
@@ -142,13 +143,9 @@ export default function SettingsPage() {
     try {
       const res = await sendTestEmailAction(testEmail);
       if (res.success) {
-        if (res.status === 'Sent') {
-          setTestSuccess('Test email sent successfully via SMTP!');
-        } else {
-          setTestSuccess('Test email simulated successfully!');
-        }
+        setTestSuccess(`Test email accepted by ${res.providerName || 'Email Provider'}! Message ID: ${res.messageId || 'Success'}`);
       } else {
-        setTestError(res.error || 'SMTP Connection failed. Verify credentials.');
+        setTestError(res.error || `Delivery failed: ${res.status}`);
       }
     } catch (err: any) {
       setTestError(err.message || 'Failed to trigger test email.');
@@ -474,7 +471,6 @@ export default function SettingsPage() {
                     setTestSuccess(null);
                     setTestError(null);
                     try {
-                      const { triggerMonthlyWarningJobAction } = await import('@/app/actions');
                       const res = await triggerMonthlyWarningJobAction({ force: true, dryRun: true });
                       if (res.success && res.summary) {
                         setTestSuccess(res.summary.message);
@@ -502,7 +498,6 @@ export default function SettingsPage() {
                     setTestSuccess(null);
                     setTestError(null);
                     try {
-                      const { triggerMonthlyWarningJobAction } = await import('@/app/actions');
                       const res = await triggerMonthlyWarningJobAction({ force: true, dryRun: false });
                       if (res.success && res.summary) {
                         setTestSuccess(res.summary.message);

@@ -88,7 +88,7 @@ model ExamMark {
   examCategory  String   // "CIA 1", "CIA 2", "Model Exam"
   subject       String
   obtainedMarks Float
-  totalMarks    Float
+  totalMarks    Float @default(100)
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
 
@@ -135,20 +135,30 @@ model Attendance {
 }
 
 model EmailLog {
-  id           Int      @id @default(autoincrement())
-  studentId    Int
-  email        String
-  percentage   Float
-  subject      String
-  body         String
-  warningMonth String?  // Format: YYYY-MM
-  sentAt       DateTime @default(now())
-  status       String   // "Sent" or "Simulated" or "Failed"
+  id                     Int       @id @default(autoincrement())
+  studentId              Int
+  studentNameSnapshot    String?
+  registerNumberSnapshot String?
+  email                  String
+  recipientEmail         String?
+  percentage             Float
+  attendancePercentage   Float?
+  subject                String
+  body                   String
+  warningMonth           String?   // Format: YYYY-MM
+  sentAt                 DateTime  @default(now())
+  status                 String    // "Sent", "Simulated", "Failed", "Not Sent — No Email"
+  deliveryStatus         String    @default("Sent")
+  providerMessageId      String?
+  trackingToken          String?
+  opened                 Boolean   @default(false)
+  openedAt               DateTime?
 
   student   Student  @relation(fields: [studentId], references: [id], onDelete: Cascade)
 
   @@unique([studentId, warningMonth])
   @@index([studentId, warningMonth])
+  @@index([trackingToken])
 }
 
 model SmtpSettings {

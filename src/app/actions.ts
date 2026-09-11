@@ -51,9 +51,10 @@ import {
   saveStudentExamMark,
   createBarcodeScanLog,
   getAllBarcodeScanHistory,
+  deleteBarcodeScanLog,
   type ScanHistoryFilters,
 } from '@/lib/db-api';
-import { sendLowAttendanceEmail } from '@/lib/email';
+import { sendLowAttendanceEmail, sendEmailWithProvider } from '@/lib/email';
 import { runMonthlyWarningEmailJob, MonthlyWarningJobOptions } from '@/lib/monthly-scheduler';
 
 export async function getAllStudents() {
@@ -359,30 +360,119 @@ export async function deleteAllEmailLogsAction() {
 }
 
 export async function sendTestEmailAction(testEmail: string) {
+  if (!(await isStaffAuthenticated())) {
+    throw new Error('Unauthorized');
+  }
+
+  const cleanRecipient = (testEmail || '').trim();
+  if (!cleanRecipient || !cleanRecipient.includes('@')) {
+    return {
+      success: false,
+      status: 'Failed',
+      providerName: 'None',
+      requestAttempted: false,
+      error: 'Please enter a valid recipient email address.',
+    };
+  }
+
+  try {
+    const settings = await getSmtpSettings();
+    const subject = `CR Attendance — Email Delivery Test`;
+    const bodyText = `This is a test email from CR Attendance.`;
+    const bodyHtml = `
+      <div style="font-family: Arial, sans-serif; max-width: 600px; padding: 24px; border: 1px solid #e2e8f0; border-radius: 12px; background: #ffffff; color: #1e293b;">
+        <h3 style="color: #4f46e5; margin-top: 0; font-size: 18px;">CR Attendance — Email Delivery Test</h3>
+        <p style="font-size: 14px; color: #334155; line-height: 1.5;">This is a test email from CR Attendance.</p>
+        <p style="font-size: 12px; color: #64748b; margin-top: 16px;">Sent Date & Time: ${new Date().toLocaleString()}</p>
+      </div>
+    `;
+
+    // Foreign Key Safety: Resolve real existing student by primary key from DB
+    const targetStudent = await prisma.student.findFirst({
+      select: {
+        id: true,
+        studentName: true,
+        registerNumber: true,
+      },
+      orderBy: { id: 'asc' },
+    });
+
+    if (!targetStudent) {
+      return {
+        success: false,
+        status: 'Failed — Student Not Found',
+        providerName: 'None',
+        requestAttempted: false,
+        error: 'No active student records found in database to associate email log.',
+      };
+    }
+
+    const result = await sendEmailWithProvider({
+      to: cleanRecipient,
+      subject,
+      bodyText,
+      bodyHtml,
+      registerNumber: targetStudent.registerNumber,
+      studentName: targetStudent.studentName,
+      smtpSettings: settings,
+    });
+
+    // Record test email log in DB using valid student primary key
+    await prisma.emailLog.create({
+      data: {
+        studentId: targetStudent.id,
+        studentNameSnapshot: targetStudent.studentName,
+        registerNumberSnapshot: targetStudent.registerNumber,
+        email: cleanRecipient,
+        recipientEmail: cleanRecipient,
+        percentage: 100.0,
+        attendancePercentage: 100.0,
+        subject,
+        body: bodyText,
+        status: result.status,
+        deliveryStatus: result.status,
+        providerMessageId: result.messageId || null,
+        opened: false,
+        openedAt: null,
+      },
+    });
+
+    revalidatePath('/emaillogs');
+    return {
+      success: result.success,
+      status: result.status,
+      providerName: result.providerName,
+      requestAttempted: result.requestAttempted,
+      messageId: result.messageId,
+      error: result.error,
+    };
+  } catch (err: any) {
+    console.error('Error in sendTestEmailAction:', err);
+    return {
+      success: false,
+      status: 'Failed',
+      providerName: 'Unknown',
+      requestAttempted: true,
+      messageId: undefined,
+      error: err?.message || 'Failed to execute test email delivery.',
+    };
+  }
+}
+
+export async function runMonthlyWarningJobAction(options: { forceRun?: boolean; force?: boolean; dryRun?: boolean } = {}) {
   if (!(await isAdminAuthenticated())) {
     throw new Error('Unauthorized');
   }
   try {
-    const settings = await getSmtpSettings();
-    const result = await sendLowAttendanceEmail({
-      studentName: 'Test Student',
-      studentEmail: testEmail,
-      registerNumber: 'TEST101',
-      department: 'CSE',
-      year: 'II',
-      section: 'A',
-      percentage: 72.5,
-      threshold: settings.lowThreshold,
-      totalWorkingSessions: 100,
-      presentCount: 72,
-      absentCount: 28,
-      month: '2026-07',
-      warningDate: '2026-07-28',
-      smtpSettings: settings,
-    });
-    return result;
-  } catch (err: any) {
-    return { success: false, status: 'Simulated', error: err.message };
+    const forceRun = options.forceRun ?? options.force ?? true;
+    const dryRun = options.dryRun ?? false;
+    const summary = await runMonthlyWarningEmailJob({ forceRun, dryRun });
+    revalidatePath('/emaillogs');
+    revalidatePath('/settings');
+    return { success: true, summary, message: summary.message };
+  } catch (error: any) {
+    console.error('Error in runMonthlyWarningJobAction:', error);
+    return { success: false, error: error?.message || 'Failed to execute monthly warning job.', message: error?.message || 'Failed to execute monthly warning job.' };
   }
 }
 
@@ -1250,23 +1340,8 @@ export async function getDailyAttendanceSummaryAction(dateString: string, studen
   }
 }
 
-export async function triggerMonthlyWarningJobAction(options: { force?: boolean; dryRun?: boolean } = {}) {
-  if (!(await isAdminAuthenticated())) {
-    throw new Error('Unauthorized');
-  }
-
-  try {
-    const summary = await runMonthlyWarningEmailJob({
-      forceRun: options.force ?? true,
-      dryRun: options.dryRun ?? false,
-    });
-    revalidatePath('/emaillogs');
-    revalidatePath('/settings');
-    return { success: true, summary };
-  } catch (error: any) {
-    console.error('Error triggering monthly warning job action:', error);
-    return { success: false, error: error?.message || 'Failed to execute monthly warning job.' };
-  }
+export async function triggerMonthlyWarningJobAction(options: { force?: boolean; forceRun?: boolean; dryRun?: boolean } = {}) {
+  return runMonthlyWarningJobAction(options);
 }
 
 // ==========================================
@@ -1414,13 +1489,19 @@ export async function saveStudentMarksAction(
     return { success: false, error: 'Invalid payload.' };
   }
 
+  const category = examCategory.trim();
+  const isStandardExam = ['CIA 1', 'CIA 2', 'Model Exam'].includes(category);
+
   // Validate all marks server-side
   for (const item of marksList) {
     const obtained = Number(item.obtainedMarks);
-    const total = Number(item.totalMarks);
+    const total = isStandardExam ? 100 : Number(item.totalMarks);
 
     if (isNaN(obtained) || obtained < 0) {
       return { success: false, error: `Obtained marks for ${item.subject} must be >= 0.` };
+    }
+    if (isStandardExam && obtained > 100) {
+      return { success: false, error: `Obtained marks (${obtained}) cannot exceed 100 for ${item.subject}.` };
     }
     if (isNaN(total) || total <= 0) {
       return { success: false, error: `Total marks for ${item.subject} must be > 0.` };
@@ -1432,12 +1513,13 @@ export async function saveStudentMarksAction(
 
   try {
     for (const item of marksList) {
+      const totalToSave = isStandardExam ? 100 : Number(item.totalMarks);
       await saveStudentExamMark(
         studentId,
-        examCategory,
+        category,
         item.subject,
         Number(item.obtainedMarks),
-        Number(item.totalMarks)
+        totalToSave
       );
     }
     revalidatePath(`/marks/${studentId}`);
@@ -1512,5 +1594,24 @@ export async function getAllScanHistoryAction(filters?: ScanHistoryFilters) {
   } catch (error) {
     console.error('Error fetching scan history:', error);
     return { success: false, error: 'Failed to load scan history.', logs: [] as any[] };
+  }
+}
+
+export async function clearScanHistoryRecordAction(logId: number) {
+  if (!(await isStaffAuthenticated())) {
+    throw new Error('Unauthorized');
+  }
+
+  if (!logId || typeof logId !== 'number') {
+    return { success: false, error: 'Invalid scan history log ID.' };
+  }
+
+  try {
+    await deleteBarcodeScanLog(logId);
+    revalidatePath('/scan-barcode/history');
+    return { success: true };
+  } catch (error) {
+    console.error('Error clearing scan history record:', error);
+    return { success: false, error: 'Failed to clear scan history record.' };
   }
 }

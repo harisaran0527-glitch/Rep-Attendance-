@@ -4,8 +4,15 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import Link from 'next/link';
 import {
   getAllScanHistoryAction,
+  clearScanHistoryRecordAction,
 } from '@/app/actions';
 import StudentAvatar from '@/components/StudentAvatar';
+import {
+  generateIndividualScanCardImage,
+  generateFullScanHistoryImages,
+  shareScanHistoryFiles,
+  FilterSummaryInfo,
+} from '@/lib/scanHistoryShare';
 import {
   ArrowLeft,
   Search,
@@ -24,6 +31,7 @@ import {
   AlertCircle,
   Eye,
   ClipboardCopy,
+  Trash2,
 } from 'lucide-react';
 
 /* ─────────────────────────────────────── Types ─────────────────────────────────────── */
@@ -114,6 +122,8 @@ export default function ScanHistoryPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [copyMsg, setCopyMsg] = useState<string | null>(null);
+  const [isGeneratingShare, setIsGeneratingShare] = useState(false);
+  const [shareToast, setShareToast] = useState<{ type: 'success' | 'info' | 'error'; message: string } | null>(null);
 
   // Filters
   const [search, setSearch] = useState('');
@@ -126,6 +136,10 @@ export default function ScanHistoryPage() {
 
   // Detail modal
   const [detailLog, setDetailLog] = useState<ScanLog | null>(null);
+
+  // Clear modal states
+  const [clearTargetLog, setClearTargetLog] = useState<ScanLog | null>(null);
+  const [isClearing, setIsClearing] = useState(false);
 
   // Pagination
   const [currentPage, setCurrentPage] = useState(1);
@@ -236,57 +250,110 @@ export default function ScanHistoryPage() {
     window.print();
   };
 
-  // ── Share Report (all filtered rows) ──
-  const handleShare = async () => {
-    const lines = [
-      'CR Attendance — Barcode / Materials Scan History',
-      `Generated: ${new Date().toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' })}`,
-      `Total Scans: ${totalScans} | Unique Students: ${uniqueStudents}`,
-      '',
-      ...allLogs.slice(0, 50).map((log, i) =>
-        `${i + 1}. ${log.studentNameSnapshot} (${log.registerNumberSnapshot}) | ${log.yearSnapshot}-${log.sectionSnapshot} | ${formatDate(log.scannedAt)} ${formatTime(log.scannedAt)} | ${log.purpose} | ${formatMaterials(log.materialsSnapshot)}`
-      ),
-      totalScans > 50 ? `... and ${totalScans - 50} more records.` : '',
-    ];
-    const text = lines.filter(Boolean).join('\n');
-
-    if (navigator.share) {
-      try {
-        await navigator.share({ title: 'CR Attendance — Scan History', text });
-        return;
-      } catch {}
+  // ── Share Report (all filtered rows as PNG Image) ──
+  const handleShareReport = async () => {
+    if (isGeneratingShare) return;
+    if (allLogs.length === 0) {
+      setShareToast({ type: 'info', message: 'No scan history records found to share.' });
+      setTimeout(() => setShareToast(null), 4000);
+      return;
     }
-    // Fallback: copy
+
+    setIsGeneratingShare(true);
+    setShareToast({ type: 'info', message: 'Generating share image...' });
+
     try {
-      await navigator.clipboard.writeText(text);
-      setCopyMsg('Report copied to clipboard!');
-      setTimeout(() => setCopyMsg(null), 3000);
-    } catch {
-      setCopyMsg('Copy failed. Please use Export Excel.');
-      setTimeout(() => setCopyMsg(null), 3000);
+      const filterParts: string[] = [];
+      if (datePreset === 'today') filterParts.push('Today');
+      else if (datePreset === 'yesterday') filterParts.push('Yesterday');
+      else if (datePreset === 'custom' && (startDate || endDate)) filterParts.push(`Date: ${startDate || 'Start'} to ${endDate || 'End'}`);
+      else filterParts.push('All Time');
+
+      if (year !== 'All') filterParts.push(`Year ${year}`);
+      if (section !== 'All') filterParts.push(`Section ${section}`);
+      if (purpose !== 'All') filterParts.push(`Purpose: ${purpose}`);
+      if (search.trim()) filterParts.push(`Search: "${search.trim()}"`);
+
+      const summaryInfo: FilterSummaryInfo = {
+        datePresetLabel: datePreset,
+        activeFilterText: filterParts.join(' | '),
+        totalScans,
+        uniqueStudents,
+        scannedToday,
+        totalBooks,
+        totalNotebooks,
+        totalRecords,
+        totalLabs,
+      };
+
+      const files = await generateFullScanHistoryImages(allLogs, summaryInfo);
+      const res = await shareScanHistoryFiles(files, 'CR Attendance — Scan History Report');
+
+      if (res.method === 'shared') {
+        setShareToast({ type: 'success', message: 'Report image ready' });
+      } else if (res.method === 'downloaded') {
+        setShareToast({ type: 'info', message: res.message });
+      } else {
+        setShareToast(null);
+      }
+    } catch (err: any) {
+      console.error('[Share] Failed to generate/share report image:', err);
+      setShareToast({ type: 'error', message: err?.message || 'Failed to generate report image.' });
+    } finally {
+      setIsGeneratingShare(false);
+      setTimeout(() => setShareToast(null), 6000);
     }
   };
 
-  // ── Share Single Row ──
-  const shareRow = async (log: ScanLog) => {
-    const text = [
-      'CR Attendance — Scan Transaction',
-      `Student: ${log.studentNameSnapshot} (${log.registerNumberSnapshot})`,
-      `Year/Section: ${log.yearSnapshot}/${log.sectionSnapshot} | Dept: ${log.departmentSnapshot}`,
-      `Date: ${formatDate(log.scannedAt)} ${formatTime(log.scannedAt)}`,
-      `Purpose: ${log.purpose}`,
-      `Materials: ${formatMaterials(log.materialsSnapshot)}`,
-      log.note ? `Note: ${log.note}` : '',
-    ].filter(Boolean).join('\n');
+  // ── Share Single Row (Individual PNG Report Card) ──
+  const handleShareRow = async (log: ScanLog) => {
+    if (isGeneratingShare) return;
+    setIsGeneratingShare(true);
+    setShareToast({ type: 'info', message: 'Generating transaction card image...' });
 
-    if (navigator.share) {
-      try { await navigator.share({ title: 'Scan Transaction', text }); return; } catch {}
-    }
     try {
-      await navigator.clipboard.writeText(text);
-      setCopyMsg('Transaction details copied!');
-      setTimeout(() => setCopyMsg(null), 3000);
-    } catch {}
+      const file = await generateIndividualScanCardImage(log);
+      const res = await shareScanHistoryFiles([file], `Scan Transaction — ${log.studentNameSnapshot}`);
+
+      if (res.method === 'shared') {
+        setShareToast({ type: 'success', message: 'Report image ready' });
+      } else if (res.method === 'downloaded') {
+        setShareToast({ type: 'info', message: res.message });
+      } else {
+        setShareToast(null);
+      }
+    } catch (err: any) {
+      console.error('[Share] Failed to generate transaction image:', err);
+      setShareToast({ type: 'error', message: err?.message || 'Failed to generate transaction image.' });
+    } finally {
+      setIsGeneratingShare(false);
+      setTimeout(() => setShareToast(null), 6000);
+    }
+  };
+
+  // ── Clear Record Handler ──
+  const handleConfirmClear = async () => {
+    if (!clearTargetLog || isClearing) return;
+    setIsClearing(true);
+
+    try {
+      const res = await clearScanHistoryRecordAction(clearTargetLog.id);
+      if (res.success) {
+        setShareToast({ type: 'success', message: 'Scan history record cleared successfully.' });
+        setTimeout(() => setShareToast(null), 5000);
+        if (detailLog?.id === clearTargetLog.id) {
+          setDetailLog(null);
+        }
+        setClearTargetLog(null);
+        await fetchHistory();
+      } else {
+        setError(res.error ?? 'Failed to clear scan history record.');
+      }
+    } catch (e) {
+      setError('Failed to clear scan history record.');
+    } finally {
+      setIsClearing(false);
+    }
   };
 
   // ── Print Single Row ──
@@ -361,11 +428,18 @@ export default function ScanHistoryPage() {
             <span className="hidden sm:inline">Print Report</span>
           </button>
           <button
-            onClick={handleShare}
-            className="flex items-center gap-1.5 px-3 py-2 bg-violet-600/20 hover:bg-violet-600/30 text-violet-300 border border-violet-500/30 font-bold rounded-xl text-xs cursor-pointer transition"
+            onClick={handleShareReport}
+            disabled={isGeneratingShare}
+            className="flex items-center gap-1.5 px-3 py-2 bg-violet-600/20 hover:bg-violet-600/30 text-violet-300 border border-violet-500/30 font-bold rounded-xl text-xs cursor-pointer transition disabled:opacity-50"
           >
-            <Share2 className="w-4 h-4" />
-            <span className="hidden sm:inline">Share Report</span>
+            {isGeneratingShare ? (
+              <RefreshCw className="w-4 h-4 animate-spin" />
+            ) : (
+              <Share2 className="w-4 h-4" />
+            )}
+            <span className="hidden sm:inline">
+              {isGeneratingShare ? 'Generating...' : 'Share Report'}
+            </span>
           </button>
           <button
             onClick={fetchHistory}
@@ -398,11 +472,27 @@ export default function ScanHistoryPage() {
         </div>
       </div>
 
-      {/* Copy feedback */}
+      {/* Copy & Share feedback */}
       {copyMsg && (
         <div className="print:hidden flex items-center gap-2 p-3 rounded-2xl bg-emerald-950/40 border border-emerald-500/30 text-emerald-300 text-xs font-bold">
           <CheckCircle2 className="w-4 h-4 shrink-0" />
           <span>{copyMsg}</span>
+        </div>
+      )}
+      {shareToast && (
+        <div className={`print:hidden flex items-center gap-2 p-3 rounded-2xl border text-xs font-bold ${
+          shareToast.type === 'error'
+            ? 'bg-rose-950/40 border-rose-500/30 text-rose-300'
+            : shareToast.type === 'success'
+            ? 'bg-emerald-950/40 border-emerald-500/30 text-emerald-300'
+            : 'bg-violet-950/40 border-violet-500/30 text-violet-300'
+        }`}>
+          {shareToast.type === 'error' ? (
+            <AlertCircle className="w-4 h-4 shrink-0 text-rose-400" />
+          ) : (
+            <CheckCircle2 className="w-4 h-4 shrink-0 text-emerald-400" />
+          )}
+          <span>{shareToast.message}</span>
         </div>
       )}
 
@@ -617,9 +707,10 @@ export default function ScanHistoryPage() {
                             <Eye className="w-3.5 h-3.5" />
                           </button>
                           <button
-                            onClick={() => shareRow(log)}
-                            title="Share"
-                            className="p-1.5 rounded-lg text-violet-400 hover:text-violet-300 hover:bg-violet-500/10 transition cursor-pointer"
+                            onClick={() => handleShareRow(log)}
+                            disabled={isGeneratingShare}
+                            title="Share Image"
+                            className="p-1.5 rounded-lg text-violet-400 hover:text-violet-300 hover:bg-violet-500/10 transition cursor-pointer disabled:opacity-50"
                           >
                             <Share2 className="w-3.5 h-3.5" />
                           </button>
@@ -629,6 +720,13 @@ export default function ScanHistoryPage() {
                             className="p-1.5 rounded-lg text-indigo-400 hover:text-indigo-300 hover:bg-indigo-500/10 transition cursor-pointer"
                           >
                             <Printer className="w-3.5 h-3.5" />
+                          </button>
+                          <button
+                            onClick={() => setClearTargetLog(log)}
+                            title="Clear Record"
+                            className="p-1.5 rounded-lg text-rose-400 hover:text-rose-300 hover:bg-rose-500/10 transition cursor-pointer"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
                           </button>
                         </div>
                       </td>
@@ -789,8 +887,9 @@ export default function ScanHistoryPage() {
 
             <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-800">
               <button
-                onClick={() => shareRow(detailLog)}
-                className="flex items-center gap-1.5 px-4 py-2 bg-violet-600/20 hover:bg-violet-600/30 text-violet-300 border border-violet-500/30 font-bold rounded-xl text-xs cursor-pointer transition"
+                onClick={() => handleShareRow(detailLog)}
+                disabled={isGeneratingShare}
+                className="flex items-center gap-1.5 px-4 py-2 bg-violet-600/20 hover:bg-violet-600/30 text-violet-300 border border-violet-500/30 font-bold rounded-xl text-xs cursor-pointer transition disabled:opacity-50"
               >
                 <Share2 className="w-3.5 h-3.5" /> Share
               </button>
@@ -801,10 +900,86 @@ export default function ScanHistoryPage() {
                 <Printer className="w-3.5 h-3.5" /> Print
               </button>
               <button
+                onClick={() => setClearTargetLog(detailLog)}
+                className="flex items-center gap-1.5 px-4 py-2 bg-rose-600/20 hover:bg-rose-600/30 text-rose-300 border border-rose-500/30 font-bold rounded-xl text-xs cursor-pointer transition"
+              >
+                <Trash2 className="w-3.5 h-3.5" /> Clear
+              </button>
+              <button
                 onClick={() => setDetailLog(null)}
                 className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold rounded-xl text-xs cursor-pointer transition"
               >
                 Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Clear Confirmation Modal ── */}
+      {clearTargetLog && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-md">
+          <div className="glass-card max-w-md w-full rounded-3xl p-6 border border-rose-500/30 shadow-2xl space-y-5">
+            <div className="flex items-center gap-3 text-rose-400">
+              <div className="p-3 bg-rose-500/10 rounded-2xl border border-rose-500/20">
+                <AlertCircle className="w-6 h-6" />
+              </div>
+              <div>
+                <h3 className="text-base font-extrabold text-slate-100">Clear Scan History?</h3>
+                <p className="text-xs text-slate-400 mt-0.5">
+                  Are you sure you want to clear this scan record for{' '}
+                  <span className="font-bold text-slate-200">{clearTargetLog.studentNameSnapshot}</span>{' '}
+                  (<span className="font-mono text-indigo-400">{clearTargetLog.registerNumberSnapshot}</span>)?
+                </p>
+              </div>
+            </div>
+
+            <div className="bg-slate-900/80 rounded-2xl p-4 border border-slate-800 space-y-2 text-xs">
+              <div className="flex justify-between">
+                <span className="text-slate-400 font-medium">Student Name:</span>
+                <span className="font-bold text-slate-100">{clearTargetLog.studentNameSnapshot}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-slate-400 font-medium">Register Number:</span>
+                <span className="font-mono font-bold text-indigo-400">{clearTargetLog.registerNumberSnapshot}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-slate-400 font-medium">Scan Date:</span>
+                <span className="font-bold text-slate-200">{formatDate(clearTargetLog.scannedAt)}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-slate-400 font-medium">Scan Time:</span>
+                <span className="font-bold text-slate-200">{formatTime(clearTargetLog.scannedAt)}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-slate-400 font-medium">Purpose:</span>
+                <span className="font-bold text-slate-300">{clearTargetLog.purpose}</span>
+              </div>
+            </div>
+
+            <p className="text-[11px] text-slate-400 italic">
+              Note: This action deletes only this specific scan transaction log. The student profile, materials, attendance, and marks will remain unchanged.
+            </p>
+
+            <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-800">
+              <button
+                onClick={() => setClearTargetLog(null)}
+                disabled={isClearing}
+                className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold rounded-xl text-xs cursor-pointer transition disabled:opacity-50"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleConfirmClear}
+                disabled={isClearing}
+                className="flex items-center gap-1.5 px-4 py-2 bg-rose-600 hover:bg-rose-500 text-white font-bold rounded-xl text-xs cursor-pointer transition disabled:opacity-50 shadow-lg shadow-rose-900/30"
+              >
+                {isClearing ? (
+                  <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                ) : (
+                  <Trash2 className="w-3.5 h-3.5" />
+                )}
+                <span>{isClearing ? 'Clearing Record...' : 'Clear Record'}</span>
               </button>
             </div>
           </div>

@@ -4,6 +4,8 @@ import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { getAllStudentsWithStats } from '@/app/actions';
 import { Search, Loader2, Award, ChevronRight, Users } from 'lucide-react';
+import * as XLSX from 'xlsx';
+import { generateMarksWorkbook } from '@/lib/marksExport';
 import StudentAvatar from '@/components/StudentAvatar';
 
 interface Student {
@@ -20,6 +22,62 @@ interface Student {
 export default function MarksPage() {
   const [students, setStudents] = useState<Student[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
+  const [exporting, setExporting] = useState(false);
+
+  // Export to Excel
+  const handleExport = async () => {
+    try {
+      setExporting(true);
+      const { workbook, fileName } = await generateMarksWorkbook(searchQuery);
+      const buffer = XLSX.write(workbook, { bookType: 'xlsx', type: 'array' });
+      const blob = new Blob([buffer], {
+        type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = fileName;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      console.error('Export error:', err);
+    } finally {
+      setExporting(false);
+    }
+  };
+
+  const handleShare = async () => {
+    try {
+      setExporting(true);
+      const { workbook, fileName } = await generateMarksWorkbook(searchQuery);
+      const buffer = XLSX.write(workbook, { bookType: 'xlsx', type: 'array' });
+      const blob = new Blob([buffer], {
+        type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      });
+      const file = new File([blob], fileName, {
+        type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      });
+      if (navigator.canShare && navigator.canShare({ files: [file] })) {
+        await navigator.share({
+          files: [file],
+          title: 'CR Attendance Marks Export',
+          text: 'Exported marks file',
+        });
+      } else {
+        // fallback to download
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = fileName;
+        a.click();
+        URL.revokeObjectURL(url);
+      }
+    } catch (err) {
+      console.error('Share error:', err);
+    } finally {
+      setExporting(false);
+    }
+  };
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -60,6 +118,22 @@ export default function MarksPage() {
           <p className="text-xs text-slate-400 light:text-slate-600 mt-1">
             Manage subject marks for CIA 1, CIA 2, and Model Exams across all enrolled students.
           </p>
+        </div>
+        <div className="flex items-center gap-2 mt-2">
+          <button
+            onClick={handleExport}
+            disabled={exporting}
+            className="btn-gradient flex items-center gap-1 px-4 py-2 text-xs text-white font-bold rounded-xl shadow-md hover:scale-105 transition disabled:opacity-50"
+          >
+            {exporting ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Export to Excel'}
+          </button>
+          <button
+            onClick={handleShare}
+            disabled={exporting}
+            className="btn-gradient flex items-center gap-1 px-4 py-2 text-xs text-white font-bold rounded-xl shadow-md hover:scale-105 transition disabled:opacity-50"
+          >
+            {exporting ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Share Excel'}
+          </button>
         </div>
       </div>
 
