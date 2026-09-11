@@ -88,6 +88,7 @@ interface StudentDashboardClientProps {
   monthlyStats: MonthlyStat[];
   materials?: MaterialItem[];
   marks?: ExamMarkItem[];
+  semesterSubjectsMap?: Record<number, string[]>;
 }
 
 export default function StudentDashboardClient({
@@ -98,12 +99,13 @@ export default function StudentDashboardClient({
   monthlyStats,
   materials = [],
   marks = [],
+  semesterSubjectsMap = {},
 }: StudentDashboardClientProps) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
 
   const [activeTab, setActiveTab] = useState<'overview' | 'calendar' | 'marks' | 'materials'>('overview');
-  const [selectedSemester, setSelectedSemester] = useState<number>(1);
+  const [selectedSemester, setSelectedSemester] = useState<number>(3);
   const [selectedExamCategory, setSelectedExamCategory] = useState<'CIA 1' | 'CIA 2' | 'Model Exam'>('CIA 1');
 
   // Calendar State
@@ -526,6 +528,26 @@ export default function StudentDashboardClient({
               const categoryMarks = marks.filter(
                 (m) => (m.semester || 1) === selectedSemester && m.examCategory === selectedExamCategory
               );
+              // Get configured subjects for this semester from semesterSubjectsMap
+              const configuredSubjects: string[] = semesterSubjectsMap[selectedSemester] || [];
+              // All subjects to display: configured subjects + any extra that have marks
+              const marksSubjects = categoryMarks.map((m) => m.subject);
+              const allSubjects = Array.from(new Set([...configuredSubjects, ...marksSubjects])).sort();
+
+              if (allSubjects.length === 0) {
+                return (
+                  <div className="py-12 text-center text-slate-500 text-xs font-medium">
+                    No subjects configured for Semester {selectedSemester} yet.
+                  </div>
+                );
+              }
+              if (categoryMarks.length === 0 && configuredSubjects.length > 0) {
+                return (
+                  <div className="py-12 text-center text-slate-500 text-xs font-medium">
+                    No marks uploaded yet for Semester {selectedSemester} ({selectedExamCategory}).
+                  </div>
+                );
+              }
               if (categoryMarks.length === 0) {
                 return (
                   <div className="py-12 text-center text-slate-500 text-xs font-medium">

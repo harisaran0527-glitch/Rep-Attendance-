@@ -1,6 +1,6 @@
 // src/lib/marksExport.ts
 import * as XLSX from 'xlsx';
-import { getAllStudentsWithStats, getStudentMarksAction } from '@/app/actions';
+import { getAllStudentsWithStats, getStudentMarksAction, getSemesterSubjectsAction } from '@/app/actions';
 
 export interface ExportStudent {
   id: number;
@@ -10,21 +10,9 @@ export interface ExportStudent {
   section: string;
 }
 
-const DEFAULT_SUBJECTS = [
-  'Java',
-  'Data Structures',
-  'EDA',
-  'Operating Systems (OS)',
-  'Discrete Mathematics',
-];
-
 /**
  * Generates an XLSX workbook with semester-wise marks for CIA 1, CIA 2, and Model Exam.
- * Recommended vertical layout:
- * SEMESTER 1
- * Subject Name
- * S.No | Register No | Student Name | CIA 1 /100 | CIA 2 /100 | Model Exam /100
- * ...
+ * Uses DB-configured subjects per semester — no hardcoded subject list.
  *
  * @param filter Optional search filter string to limit students.
  * @param semesterFilter Optional semester number (1-8) or 'ALL' to export all semesters vertically.
@@ -37,6 +25,7 @@ export async function generateMarksWorkbook(
   const filtered = allStudents.filter((s) => {
     const q = filter.toLowerCase().trim();
     return (
+      !q ||
       s.registerNumber.toLowerCase().includes(q) ||
       s.studentName.toLowerCase().includes(q) ||
       s.year.toLowerCase().includes(q) ||
@@ -68,32 +57,48 @@ export async function generateMarksWorkbook(
   if (typeof semesterFilter === 'number' && semesterFilter >= 1 && semesterFilter <= 8) {
     semestersToExport = [semesterFilter];
   } else {
-    // If ALL, export active semesters in order (or 1..8 if active, default to at least [1])
-    const activeArr = Array.from(activeSemestersSet).sort((a, b) => a - b);
-    semestersToExport = activeArr.length > 0 ? activeArr : [1];
+    // For ALL: export only semesters that have configured subjects
+    const allSems = [1, 2, 3, 4, 5, 6, 7, 8];
+    semestersToExport = allSems;
   }
 
   const header = ['S.No', 'Register Number', 'Student Name', 'CIA 1 /100', 'CIA 2 /100', 'Model Exam /100'];
   const sheetData: any[][] = [];
   const merges: XLSX.Range[] = [];
   let currentRowIndex = 0;
+  let hasAnyData = false;
 
   for (const sem of semestersToExport) {
+    // Load configured subjects for this semester from DB
+    let configuredSubjects: string[] = [];
+    try {
+      const subjectsRes = await getSemesterSubjectsAction(sem);
+      if (subjectsRes.success && subjectsRes.subjects && subjectsRes.subjects.length > 0) {
+        configuredSubjects = (subjectsRes.subjects as { subjectName: string }[])
+          .map((s) => s.subjectName)
+          .sort();
+      }
+    } catch {}
+
+    // Also collect subjects from actual marks data (for subjects that may have been removed from config)
+    const marksSubjectSet = new Set<string>(configuredSubjects);
+    filtered.forEach((stu) => {
+      const semData = studentMap[stu.id]?.[sem] || {};
+      Object.keys(semData).forEach((cat) => {
+        Object.keys(semData[cat]).forEach((sub) => marksSubjectSet.add(sub));
+      });
+    });
+
+    // Only include this semester if it has subjects configured or has marks data
+    if (marksSubjectSet.size === 0) continue;
+
+    hasAnyData = true;
+    const subjects = Array.from(marksSubjectSet).sort();
+
     // Semester Title Banner
     sheetData.push([`SEMESTER ${sem}`]);
     merges.push({ s: { r: currentRowIndex, c: 0 }, e: { r: currentRowIndex, c: header.length - 1 } });
     currentRowIndex++;
-
-    // Collect subjects for this semester
-    const semSubjectSet = new Set<string>(DEFAULT_SUBJECTS);
-    filtered.forEach((stu) => {
-      const semData = studentMap[stu.id]?.[sem] || {};
-      Object.keys(semData).forEach((cat) => {
-        Object.keys(semData[cat]).forEach((sub) => semSubjectSet.add(sub));
-      });
-    });
-
-    const subjects = Array.from(semSubjectSet).sort();
 
     subjects.forEach((subj) => {
       // Subject heading
@@ -133,6 +138,11 @@ export async function generateMarksWorkbook(
     // Blank row between semesters
     sheetData.push([]);
     currentRowIndex++;
+  }
+
+  // If no data at all, add an informational row
+  if (!hasAnyData) {
+    sheetData.push(['No subjects configured or marks found for the selected semester(s).']);
   }
 
   const wb = XLSX.utils.book_new();

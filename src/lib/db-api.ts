@@ -720,7 +720,71 @@ export async function saveStudentExamMark(
 
 
 // ==========================================
-// ATTENDANCE API
+// SEMESTER SUBJECTS API
+// ==========================================
+
+export async function getSemesterSubjects(semester: number) {
+  const sem = Math.max(1, Math.min(8, Number(semester) || 1));
+  return prisma.semesterSubject.findMany({
+    where: { semester: sem },
+    orderBy: { subjectName: 'asc' },
+  });
+}
+
+export async function getAllSemesterSubjectsMap(): Promise<Record<number, string[]>> {
+  const rows = await prisma.semesterSubject.findMany({
+    orderBy: [{ semester: 'asc' }, { subjectName: 'asc' }],
+  });
+  const map: Record<number, string[]> = {};
+  rows.forEach((r) => {
+    if (!map[r.semester]) map[r.semester] = [];
+    map[r.semester].push(r.subjectName);
+  });
+  return map;
+}
+
+export async function addSemesterSubject(semester: number, subjectName: string) {
+  const sem = Math.max(1, Math.min(8, Number(semester) || 1));
+  const name = subjectName.trim();
+  if (!name) throw new Error('Subject name cannot be empty.');
+  return prisma.semesterSubject.upsert({
+    where: { semester_subjectName: { semester: sem, subjectName: name } },
+    update: {},
+    create: { semester: sem, subjectName: name },
+  });
+}
+
+export async function renameSemesterSubject(id: number, newName: string) {
+  const name = newName.trim();
+  if (!name) throw new Error('Subject name cannot be empty.');
+  const existing = await prisma.semesterSubject.findUnique({ where: { id } });
+  if (!existing) throw new Error('Subject not found.');
+  // Check no conflict on same semester + new name
+  const conflict = await prisma.semesterSubject.findUnique({
+    where: { semester_subjectName: { semester: existing.semester, subjectName: name } },
+  });
+  if (conflict && conflict.id !== id) throw new Error(`Subject "${name}" already exists in Semester ${existing.semester}.`);
+  return prisma.semesterSubject.update({ where: { id }, data: { subjectName: name } });
+}
+
+export async function removeSemesterSubject(id: number): Promise<{ success: boolean; error?: string }> {
+  const existing = await prisma.semesterSubject.findUnique({ where: { id } });
+  if (!existing) return { success: false, error: 'Subject not found.' };
+
+  // Check if any ExamMark records reference this subject in this semester
+  const marksCount = await prisma.examMark.count({
+    where: { semester: existing.semester, subject: existing.subjectName },
+  });
+  if (marksCount > 0) {
+    return {
+      success: false,
+      error: `Cannot remove "${existing.subjectName}" — ${marksCount} mark record(s) exist for this subject in Semester ${existing.semester}. Delete the marks first.`,
+    };
+  }
+  await prisma.semesterSubject.delete({ where: { id } });
+  return { success: true };
+}
+
 // ==========================================
 
 export async function saveAttendance(

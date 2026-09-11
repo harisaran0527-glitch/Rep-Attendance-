@@ -7,6 +7,7 @@ import {
   getStudentMonthlyStatsAction,
   getStudentPortalFullDataAction,
 } from '../../actions';
+import { getAllSemesterSubjectsMap } from '@/lib/db-api';
 import StudentDashboardClient from './StudentDashboardClient';
 
 export const metadata = {
@@ -21,12 +22,13 @@ export default async function StudentDashboardPage() {
   }
 
   try {
-    const [profileStatsRes, history, subjectStats, monthlyStats, fullDataRes] = await Promise.all([
+    const [profileStatsRes, history, subjectStats, monthlyStats, fullDataRes, semesterSubjectsMap] = await Promise.all([
       getStudentProfileStatsAction(),
       getStudentHistoryAction(),
       getStudentSubjectStatsAction(),
       getStudentMonthlyStatsAction(),
       getStudentPortalFullDataAction(),
+      getAllSemesterSubjectsMap(),
     ]);
 
     return (
@@ -38,6 +40,7 @@ export default async function StudentDashboardPage() {
         monthlyStats={monthlyStats}
         materials={fullDataRes.materials || []}
         marks={fullDataRes.marks || []}
+        semesterSubjectsMap={semesterSubjectsMap}
       />
     );
   } catch (error) {

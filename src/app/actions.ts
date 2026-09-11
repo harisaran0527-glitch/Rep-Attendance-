@@ -49,6 +49,11 @@ import {
   saveStudentMaterial,
   getStudentExamMarks,
   saveStudentExamMark,
+  getSemesterSubjects,
+  getAllSemesterSubjectsMap,
+  addSemesterSubject,
+  renameSemesterSubject,
+  removeSemesterSubject,
   createBarcodeScanLog,
   getAllBarcodeScanHistory,
   deleteBarcodeScanLog,
@@ -1537,6 +1542,33 @@ export async function saveStudentMarksAction(
   }
 }
 
+// Single-subject save — used by the per-subject marks entry UI
+export async function saveStudentMarkSingleAction(
+  studentId: number,
+  semester: number,
+  examCategory: string,
+  subject: string,
+  obtainedMarks: number,
+  totalMarks: number = 100
+) {
+  if (!(await isStaffAuthenticated())) throw new Error('Unauthorized');
+  const sem = Math.max(1, Math.min(8, Number(semester) || 1));
+  const category = examCategory.trim();
+  const sub = subject.trim();
+  const isStandardExam = ['CIA 1', 'CIA 2', 'Model Exam'].includes(category);
+  const total = isStandardExam ? 100 : (totalMarks || 100);
+  if (isNaN(obtainedMarks) || obtainedMarks < 0) return { success: false, error: 'Obtained marks must be >= 0.' };
+  if (obtainedMarks > total) return { success: false, error: `Obtained marks (${obtainedMarks}) cannot exceed ${total}.` };
+  try {
+    await saveStudentExamMark(studentId, sem, category, sub, obtainedMarks, total);
+    revalidatePath(`/marks/${studentId}`);
+    return { success: true };
+  } catch (error: any) {
+    console.error('Error saving mark:', error);
+    return { success: false, error: 'Failed to save mark.' };
+  }
+}
+
 
 
 // ==========================================
@@ -1565,6 +1597,78 @@ export async function getStudentPortalFullDataAction() {
   } catch (error) {
     console.error('Error loading student portal full data:', error);
     return { success: false, error: 'Failed to load portal records.' };
+  }
+}
+
+// ==========================================
+// SEMESTER SUBJECTS ACTIONS
+// ==========================================
+
+export async function getSemesterSubjectsAction(semester: number) {
+  if (!(await isStaffAuthenticated())) throw new Error('Unauthorized');
+  try {
+    const subjects = await getSemesterSubjects(semester);
+    return { success: true, subjects };
+  } catch (error) {
+    return { success: false, error: 'Failed to load subjects.', subjects: [] as any[] };
+  }
+}
+
+export async function getAllSemesterSubjectsAction() {
+  if (!(await isStaffAuthenticated())) throw new Error('Unauthorized');
+  try {
+    const map = await getAllSemesterSubjectsMap();
+    return { success: true, map };
+  } catch (error) {
+    return { success: false, error: 'Failed to load subjects.', map: {} as Record<number, string[]> };
+  }
+}
+
+export async function addSemesterSubjectAction(semester: number, subjectName: string) {
+  if (!(await isStaffAuthenticated())) throw new Error('Unauthorized');
+  const name = subjectName?.trim();
+  if (!name) return { success: false, error: 'Subject name is required.' };
+  try {
+    const subject = await addSemesterSubject(semester, name);
+    revalidatePath('/marks');
+    return { success: true, subject };
+  } catch (error: any) {
+    if (error?.code === 'P2002') return { success: false, error: `Subject "${name}" already exists in Semester ${semester}.` };
+    return { success: false, error: error?.message || 'Failed to add subject.' };
+  }
+}
+
+export async function renameSemesterSubjectAction(id: number, newName: string) {
+  if (!(await isStaffAuthenticated())) throw new Error('Unauthorized');
+  const name = newName?.trim();
+  if (!name) return { success: false, error: 'Subject name is required.' };
+  try {
+    const subject = await renameSemesterSubject(id, name);
+    revalidatePath('/marks');
+    return { success: true, subject };
+  } catch (error: any) {
+    return { success: false, error: error?.message || 'Failed to rename subject.' };
+  }
+}
+
+export async function removeSemesterSubjectAction(id: number) {
+  if (!(await isStaffAuthenticated())) throw new Error('Unauthorized');
+  try {
+    const result = await removeSemesterSubject(id);
+    if (result.success) revalidatePath('/marks');
+    return result;
+  } catch (error: any) {
+    return { success: false, error: error?.message || 'Failed to remove subject.' };
+  }
+}
+
+// For student portal — no auth check needed (uses student session)
+export async function getSemesterSubjectsForStudentAction(semester: number) {
+  try {
+    const subjects = await getSemesterSubjects(semester);
+    return { success: true, subjects };
+  } catch (error) {
+    return { success: false, subjects: [] as any[] };
   }
 }
 

@@ -176,6 +176,17 @@ model SmtpSettings {
   lastMonthlyWarningRun String?
 }
 
+model SemesterSubject {
+  id          Int      @id @default(autoincrement())
+  semester    Int
+  subjectName String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@unique([semester, subjectName])
+  @@index([semester])
+}
+
 model Teacher {
   id         Int      @id @default(autoincrement())
   name       String
